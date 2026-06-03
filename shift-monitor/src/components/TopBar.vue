@@ -89,10 +89,17 @@ const formattedTime = computed(() => {
   justify-content: space-between;
   padding: 0 24px;
   height: 56px;
-  background: var(--surface);
-  border-bottom: 1px solid var(--border);
+  background: #182030;
+  border-bottom: 1px solid #2c3d56;
   flex-shrink: 0;
   gap: 12px;
+  /* Always-dark overrides so buttons/text look right regardless of page theme */
+  --surface2: #1f2a3e;
+  --border:   #2c3d56;
+  --border2:  #3a5068;
+  --text:     #e3e9f0;
+  --muted:    #7d90a4;
+  --blue:     #0096c7;
 }
 
 .topbar-left {
