@@ -1,0 +1,18 @@
+[
+  {
+    "sshUser": "admin",
+    "id": "mpx4eku635aw",
+    "name": "test-vm",
+    "privateIp": "3.87.172.0",
+    "publicIp": "3.87.172.0",
+    "region": "us-east-1",
+    "services": [
+      {
+        "name": "server health",
+        "language": "node",
+        "port": 80,
+        "healthPath": "/"
+      }
+    ]
+  }
+]
