@@ -61,6 +61,12 @@
       :servers="servers"
       @close="groupModalOpen = false"
     />
+
+    <!-- login overlay — shown when auth is required and no valid session -->
+    <LoginOverlay
+      v-if="showLogin"
+      @authenticated="onAuthenticated"
+    />
   </div>
 </template>
 
@@ -75,6 +81,7 @@ import FilterBar from './components/FilterBar.vue'
 import ServerGroup from './components/ServerGroup.vue'
 import ServerConfigModal from './components/ServerConfigModal.vue'
 import GroupManagerModal from './components/GroupManagerModal.vue'
+import LoginOverlay from './components/LoginOverlay.vue'
 
 const { servers, whenReady, addServer, updateServer, removeServer } = useServers()
 const {
@@ -87,6 +94,7 @@ const activeFilter   = ref('all')
 const modalOpen      = ref(false)
 const editingServer  = ref(null)
 const groupModalOpen = ref(false)
+const showLogin      = ref(false)
 
 // Reset filter if the active group is deleted.
 watch(groups, (newGroups) => {
@@ -168,7 +176,23 @@ function handleImport(file) {
   reader.readAsText(file)
 }
 
+async function checkAuth() {
+  try {
+    const res = await fetch('/api/auth')
+    if (!res.ok) return
+    const { authEnabled, authenticated } = await res.json()
+    if (authEnabled && !authenticated) {
+      showLogin.value = true
+    }
+  } catch { /* proxy not running — proceed without auth gate */ }
+}
+
+function onAuthenticated() {
+  showLogin.value = false
+}
+
 onMounted(async () => {
+  await checkAuth()
   await whenReady
   startPolling()
 })
