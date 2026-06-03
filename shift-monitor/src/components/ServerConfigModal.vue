@@ -147,9 +147,11 @@
         </button>
       </div>
     </div>
+  </div>
+
   <ConfirmDialog
     v-if="pendingRemoveIndex !== null"
-    :message="`Remove service &quot;${form.services[pendingRemoveIndex]?.name || 'this service'}&quot;?`"
+    :message="`Remove service '${form.services[pendingRemoveIndex]?.name || 'this service'}'?`"
     confirm-label="Remove"
     @confirm="doRemoveService"
     @cancel="pendingRemoveIndex = null"

@@ -88,7 +88,7 @@
 
   <ConfirmDialog
     v-if="confirmingDelete"
-    :message="`Remove &quot;${server.name}&quot; from the dashboard?`"
+    :message="`Remove '${server.name}' from the dashboard?`"
     confirm-label="Remove"
     @confirm="doDelete"
     @cancel="confirmingDelete = false"
