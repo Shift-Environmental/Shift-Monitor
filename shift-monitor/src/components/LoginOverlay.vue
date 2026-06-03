@@ -69,7 +69,7 @@ async function submit() {
 .login-overlay {
   position: fixed;
   inset: 0;
-  background: var(--bg);
+  background: #0f1620;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -77,8 +77,8 @@ async function submit() {
 }
 
 .login-card {
-  background: var(--surface);
-  border: 1px solid var(--border);
+  background: #182030;
+  border: 1px solid #2c3d56;
   border-radius: 12px;
   padding: 48px 40px;
   width: 100%;
@@ -100,14 +100,14 @@ async function submit() {
   font-family: 'JetBrains Mono', monospace;
   font-size: 12px;
   font-weight: 500;
-  color: var(--muted);
+  color: #7d90a4;
   letter-spacing: 0.06em;
   margin-bottom: 6px;
 }
 
 .subtitle {
   font-size: 13px;
-  color: var(--muted);
+  color: #7d90a4;
   margin: 0 0 16px;
 }
 
@@ -121,10 +121,10 @@ form {
 .password-input {
   width: 100%;
   padding: 10px 14px;
-  background: var(--bg);
-  border: 1px solid var(--border);
+  background: #0f1620;
+  border: 1px solid #2c3d56;
   border-radius: 6px;
-  color: var(--text);
+  color: #e3e9f0;
   font-size: 14px;
   font-family: inherit;
   outline: none;
