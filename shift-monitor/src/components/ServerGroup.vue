@@ -48,6 +48,14 @@
       <span class="ping-type">tcp/:22</span>
       <span class="ping-status">{{ pingLabel }}</span>
       <span class="ping-latency">{{ pingLatency }}</span>
+      <span class="ping-sparkbar" aria-label="Ping history">
+        <span
+          v-for="(entry, i) in paddedPingHistory"
+          :key="i"
+          class="ping-spark-seg"
+          :class="`spark-${entry}`"
+        ></span>
+      </span>
     </div>
 
     <!-- ── no services match filter ── -->
@@ -84,10 +92,11 @@ import { ref, computed } from 'vue'
 import ServiceRow from './ServiceRow.vue'
 
 const props = defineProps({
-  server:     { type: Object, required: true },
-  results:    { type: Object, required: true },
-  pingResult: { type: Object, default: null },
-  filter:     { type: String, required: true },
+  server:      { type: Object,  required: true },
+  results:     { type: Object,  required: true },
+  pingResult:  { type: Object,  default: null },
+  pingHistory: { type: Array,   default: () => [] },
+  filter:      { type: String,  required: true },
 })
 
 const emit = defineEmits(['poll-one', 'edit', 'delete'])
@@ -137,6 +146,12 @@ const pingLatency = computed(() => {
   const ms = props.pingResult?.latency
   if (ms == null) return '—'
   return `${ms}ms`
+})
+
+const paddedPingHistory = computed(() => {
+  const hist = props.pingHistory ?? []
+  const padCount = Math.max(0, 40 - hist.length)
+  return [...Array(padCount).fill('empty'), ...hist]
 })
 
 // SSH copy-to-clipboard
@@ -363,4 +378,24 @@ function confirmDelete() {
 .ping-up   .ping-status { color: var(--up); }
 .ping-down .ping-status { color: var(--down); }
 .ping-unknown .ping-status { color: var(--muted); }
+
+.ping-sparkbar {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  flex: 1;
+  overflow: hidden;
+  margin-left: 8px;
+}
+
+.ping-spark-seg {
+  width: 5px;
+  height: 12px;
+  border-radius: 1px;
+  flex-shrink: 0;
+}
+
+.spark-up    { background: var(--up);     opacity: 0.75; }
+.spark-down  { background: var(--down);   opacity: 0.9; }
+.spark-empty { background: var(--border); opacity: 0.35; }
 </style>

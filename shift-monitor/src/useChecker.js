@@ -4,12 +4,14 @@ import { useServers, svcUrl } from './useServers.js'
 const POLL_INTERVAL = 300_000
 const HISTORY_SIZE = 40
 const LS_HISTORY_KEY = 'shift-history'
+const LS_PING_KEY    = 'shift-ping-history'
 
 const { servers } = useServers()
 
 // Module-level singleton — every useChecker() call shares these refs.
-const results     = ref({})
-const pingResults = ref({})
+const results       = ref({})
+const pingResults   = ref({})
+const pingHistories = ref({})
 const lastPolled  = ref(null)
 const isPolling   = ref(false)
 const proxyOnline = ref(true)  // false when the local proxy isn't running
@@ -69,6 +71,7 @@ function saveHistory() {
   }
   try {
     localStorage.setItem(LS_HISTORY_KEY, JSON.stringify(snapshot))
+    localStorage.setItem(LS_PING_KEY,    JSON.stringify(pingHistories.value))
   } catch { /* quota exceeded */ }
 }
 
@@ -87,7 +90,30 @@ function loadHistory() {
   }
 }
 
+function loadPingHistory() {
+  try {
+    const raw = localStorage.getItem(LS_PING_KEY)
+    if (!raw) return {}
+    const parsed = JSON.parse(raw)
+    const out = {}
+    for (const [id, hist] of Object.entries(parsed)) {
+      if (Array.isArray(hist)) out[id] = hist.slice(-HISTORY_SIZE)
+    }
+    return out
+  } catch {
+    return {}
+  }
+}
+
 // --- server ping (TCP reachability on port 22) ---
+
+function appendPingHistory(serverId, reachable) {
+  const prev = pingHistories.value[serverId] ?? []
+  pingHistories.value = {
+    ...pingHistories.value,
+    [serverId]: [...prev, reachable ? 'up' : 'down'].slice(-HISTORY_SIZE),
+  }
+}
 
 async function pingServer(server) {
   const host = server.privateIp
@@ -100,12 +126,15 @@ async function pingServer(server) {
     })
     if (!res.ok) {
       pingResults.value = { ...pingResults.value, [server.id]: { reachable: false, latency: null } }
+      appendPingHistory(server.id, false)
       return
     }
     const data = await res.json()
-    pingResults.value = { ...pingResults.value, [server.id]: data }
+    pingResults.value   = { ...pingResults.value, [server.id]: data }
+    appendPingHistory(server.id, data.reachable)
   } catch {
     pingResults.value = { ...pingResults.value, [server.id]: { reachable: false, latency: null } }
+    appendPingHistory(server.id, false)
   }
 }
 
@@ -116,12 +145,16 @@ function buildEmptyResult(history = []) {
 }
 
 function initResults() {
-  const persisted = loadHistory()
+  const persisted     = loadHistory()
+  const persistedPing = loadPingHistory()
   const initial = {}
   for (const srv of servers.value) {
     for (const svc of srv.services) {
       const key = makeKey(srv.id, svc.name)
       initial[key] = buildEmptyResult(persisted[key] ?? [])
+    }
+    if (persistedPing[srv.id]) {
+      pingHistories.value = { ...pingHistories.value, [srv.id]: persistedPing[srv.id] }
     }
   }
   results.value = initial
@@ -222,7 +255,7 @@ const summary = computed(() => {
 
 export function useChecker() {
   return {
-    results, pingResults, lastPolled, isPolling, proxyOnline,
+    results, pingResults, pingHistories, lastPolled, isPolling, proxyOnline,
     summary, pollAll, pollOne, startPolling, stopPolling,
   }
 }
