@@ -25,7 +25,7 @@
       <div v-if="servers.length === 0" class="empty-state">
         <div class="empty-icon">⬡</div>
         <h2>No servers configured</h2>
-        <p>Click <strong>+ Add Server</strong> in the top bar to add your first EC2 instance.</p>
+        <p>Click <strong>+ Add Server</strong> in the top bar to add your first instance.</p>
       </div>
 
       <!-- server list -->
@@ -36,6 +36,7 @@
           :server="server"
           :results="results"
           :ping-result="pingResults[server.id]"
+          :ping-history="pingHistories[server.id] ?? []"
           :filter="serverFilter"
           @poll-one="pollOne"
           @edit="openEditModal"
@@ -85,7 +86,7 @@ import LoginOverlay from './components/LoginOverlay.vue'
 
 const { servers, whenReady, addServer, updateServer, removeServer, reloadServers } = useServers()
 const {
-  results, pingResults, lastPolled, isPolling, proxyOnline,
+  results, pingResults, pingHistories, lastPolled, isPolling, proxyOnline,
   summary, pollAll, pollOne, startPolling, stopPolling,
 } = useChecker()
 const { groups } = useGroups()
