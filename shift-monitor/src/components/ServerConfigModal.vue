@@ -198,7 +198,6 @@ const canSave = computed(() => {
   return (
     form.name.trim() &&
     validIp.value &&
-    form.services.length > 0 &&
     form.services.every((s) => s.name.trim() && s.port > 0 && s.port <= 65535)
   )
 })
