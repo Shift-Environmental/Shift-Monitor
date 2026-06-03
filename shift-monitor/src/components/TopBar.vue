@@ -83,16 +83,20 @@ const formattedTime = computed(() => {
 .topbar {
   position: sticky;
   top: 0;
+  left: 0;
+  right: 0;
   z-index: 100;
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 0 24px;
+  width: 100%;
   height: 56px;
   background: #182030;
   border-bottom: 1px solid #2c3d56;
   flex-shrink: 0;
   gap: 12px;
+  box-sizing: border-box;
   /* Always-dark overrides so buttons/text look right regardless of page theme */
   --surface2: #1f2a3e;
   --border:   #2c3d56;
