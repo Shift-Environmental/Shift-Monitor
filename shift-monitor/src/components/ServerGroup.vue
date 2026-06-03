@@ -85,11 +85,20 @@
     </template>
 
   </div>
+
+  <ConfirmDialog
+    v-if="confirmingDelete"
+    :message="`Remove &quot;${server.name}&quot; from the dashboard?`"
+    confirm-label="Remove"
+    @confirm="doDelete"
+    @cancel="confirmingDelete = false"
+  />
 </template>
 
 <script setup>
 import { ref, computed } from 'vue'
 import ServiceRow from './ServiceRow.vue'
+import ConfirmDialog from './ConfirmDialog.vue'
 
 const props = defineProps({
   server:      { type: Object,  required: true },
@@ -154,6 +163,18 @@ const paddedPingHistory = computed(() => {
   return [...Array(padCount).fill('empty'), ...hist]
 })
 
+// delete confirmation
+const confirmingDelete = ref(false)
+
+function confirmDelete() {
+  confirmingDelete.value = true
+}
+
+function doDelete() {
+  confirmingDelete.value = false
+  emit('delete', props.server.id)
+}
+
 // SSH copy-to-clipboard
 const sshCopied = ref(false)
 
@@ -166,11 +187,6 @@ function copySSH() {
   })
 }
 
-function confirmDelete() {
-  if (window.confirm(`Remove "${props.server.name}" and all its services from the dashboard?`)) {
-    emit('delete', props.server.id)
-  }
-}
 </script>
 
 <style scoped>

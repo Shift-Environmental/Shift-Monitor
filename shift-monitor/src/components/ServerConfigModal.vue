@@ -147,12 +147,19 @@
         </button>
       </div>
     </div>
-  </div>
+  <ConfirmDialog
+    v-if="pendingRemoveIndex !== null"
+    :message="`Remove service &quot;${form.services[pendingRemoveIndex]?.name || 'this service'}&quot;?`"
+    confirm-label="Remove"
+    @confirm="doRemoveService"
+    @cancel="pendingRemoveIndex = null"
+  />
 </template>
 
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue'
 import { HEALTH_PATHS } from '../useServers.js'
+import ConfirmDialog from './ConfirmDialog.vue'
 
 const props = defineProps({
   server: { type: Object, default: null },
@@ -211,8 +218,17 @@ function addService() {
   })
 }
 
+const pendingRemoveIndex = ref(null)
+
 function removeService(i) {
-  form.services.splice(i, 1)
+  pendingRemoveIndex.value = i
+}
+
+function doRemoveService() {
+  if (pendingRemoveIndex.value !== null) {
+    form.services.splice(pendingRemoveIndex.value, 1)
+    pendingRemoveIndex.value = null
+  }
 }
 
 function autoPath(svc) {
