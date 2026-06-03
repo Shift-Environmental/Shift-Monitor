@@ -1,8 +1,12 @@
 <template>
   <div class="login-overlay">
     <div class="login-card">
-      <div class="login-logo">⬡</div>
-      <h1>Shift Monitor</h1>
+      <img
+        src="https://images.squarespace-cdn.com/content/v1/6a02b422e7098049073dc81e/09b49f60-b51a-43a3-98f3-d792932fc98a/Horizontal+Shift+Logo+Reversed.png?format=750w"
+        alt="Shift Coastal Technologies"
+        class="login-logo"
+      />
+      <span class="login-product">monitor</span>
       <p class="subtitle">Enter your password to continue</p>
 
       <form @submit.prevent="submit">
@@ -86,18 +90,19 @@ async function submit() {
 }
 
 .login-logo {
-  font-size: 40px;
-  color: var(--blue);
-  line-height: 1;
-  margin-bottom: 4px;
+  height: 36px;
+  width: auto;
+  display: block;
+  margin-bottom: 2px;
 }
 
-h1 {
-  font-family: 'Syne', sans-serif;
-  font-size: 22px;
-  font-weight: 700;
-  color: var(--text);
-  margin: 0;
+.login-product {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--muted);
+  letter-spacing: 0.06em;
+  margin-bottom: 6px;
 }
 
 .subtitle {
