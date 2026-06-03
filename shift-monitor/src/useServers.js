@@ -66,5 +66,5 @@ function removeServer(id) {
 }
 
 export function useServers() {
-  return { servers, whenReady, addServer, updateServer, removeServer }
+  return { servers, whenReady, addServer, updateServer, removeServer, reloadServers: initServers }
 }

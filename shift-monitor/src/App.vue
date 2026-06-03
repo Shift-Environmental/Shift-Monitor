@@ -83,7 +83,7 @@ import ServerConfigModal from './components/ServerConfigModal.vue'
 import GroupManagerModal from './components/GroupManagerModal.vue'
 import LoginOverlay from './components/LoginOverlay.vue'
 
-const { servers, whenReady, addServer, updateServer, removeServer } = useServers()
+const { servers, whenReady, addServer, updateServer, removeServer, reloadServers } = useServers()
 const {
   results, pingResults, lastPolled, isPolling, proxyOnline,
   summary, pollAll, pollOne, startPolling, stopPolling,
@@ -187,12 +187,16 @@ async function checkAuth() {
   } catch { /* proxy not running — proceed without auth gate */ }
 }
 
-function onAuthenticated() {
+async function onAuthenticated() {
   showLogin.value = false
+  await reloadServers()
+  stopPolling()
+  startPolling()
 }
 
 onMounted(async () => {
   await checkAuth()
+  if (showLogin.value) return  // wait for user to log in before polling
   await whenReady
   startPolling()
 })
