@@ -10,41 +10,45 @@
         <span class="logo-divider">/</span>
         <span class="logo-product">monitor</span>
       </div>
-      <span class="polling-dot" :class="{ active: isPolling }"></span>
-      <span v-if="!proxyOnline" class="proxy-warn" title="The proxy server isn't running. Start it with: node server.js">
-        ⚠ proxy offline
-      </span>
+
+      <div class="topbar-meta">
+        <span class="polling-dot" :class="{ active: isPolling }" :title="isPolling ? 'Polling…' : 'Idle'"></span>
+        <span class="server-count">
+          <i class="mdi mdi-server-network"></i>
+          {{ serverCount }} {{ serverCount === 1 ? 'server' : 'servers' }}
+        </span>
+        <span v-if="lastPolled" class="last-polled">
+          <i class="mdi mdi-clock-outline"></i>
+          {{ formattedTime }}
+        </span>
+        <span v-if="!proxyOnline" class="proxy-warn">
+          <i class="mdi mdi-alert"></i> proxy offline
+        </span>
+      </div>
     </div>
 
     <div class="topbar-right">
-      <span class="server-count">{{ serverCount }} {{ serverCount === 1 ? 'server' : 'servers' }}</span>
-
-      <span v-if="lastPolled" class="last-polled">
-        Last polled:&nbsp;
-        <time :datetime="lastPolled.toISOString()">{{ formattedTime }}</time>
-      </span>
-
-      <button class="refresh-btn" :disabled="isPolling" @click="$emit('refresh')" title="Poll all servers now">
-        <span class="refresh-icon" :class="{ spinning: isPolling }">↻</span>
-        Refresh
+      <button class="btn-ghost" :disabled="isPolling" @click="$emit('refresh')" title="Poll all servers now">
+        <i class="mdi mdi-refresh" :class="{ spinning: isPolling }"></i>
+        <span class="btn-label">Refresh</span>
       </button>
 
-      <button class="add-btn" @click="$emit('add-server')" title="Add a new server">
-        + Add Server
+      <button class="btn-primary" @click="$emit('add-server')" title="Add a new server">
+        <i class="mdi mdi-plus"></i>
+        <span class="btn-label">Add Server</span>
       </button>
 
-      <button class="icon-action-btn" title="Export servers to JSON" @click="$emit('export')">
-        ↓ Export
+      <button class="btn-icon" title="Export servers to JSON" @click="$emit('export')">
+        <i class="mdi mdi-download"></i>
       </button>
 
-      <label class="icon-action-btn" title="Import servers from JSON">
-        ↑ Import
+      <label class="btn-icon" title="Import servers from JSON">
+        <i class="mdi mdi-upload"></i>
         <input type="file" accept=".json,application/json" class="hidden-file" @change="onImportFile" />
       </label>
 
-      <button class="theme-btn" :title="theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'" @click="toggleTheme">
-        <span v-if="theme === 'dark'">☀</span>
-        <span v-else>☾</span>
+      <button class="btn-icon" :title="theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'" @click="toggleTheme">
+        <i class="mdi" :class="theme === 'dark' ? 'mdi-weather-sunny' : 'mdi-weather-night'"></i>
       </button>
     </div>
   </header>
@@ -83,34 +87,32 @@ const formattedTime = computed(() => {
 .topbar {
   position: sticky;
   top: 0;
-  left: 0;
-  right: 0;
   z-index: 100;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 24px;
-  width: 100%;
-  height: 56px;
+  padding: 0 20px;
+  height: 54px;
   background: #182030;
   border-bottom: 1px solid #2c3d56;
   flex-shrink: 0;
-  gap: 12px;
+  gap: 16px;
   box-sizing: border-box;
-  /* Always-dark overrides so buttons/text look right regardless of page theme */
   --surface2: #1f2a3e;
   --border:   #2c3d56;
   --border2:  #3a5068;
   --text:     #e3e9f0;
   --muted:    #7d90a4;
   --blue:     #0096c7;
+  --warn:     #f59e0b;
 }
 
 .topbar-left {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 16px;
   flex-shrink: 0;
+  min-width: 0;
 }
 
 .logo {
@@ -120,50 +122,68 @@ const formattedTime = computed(() => {
   flex-shrink: 0;
 }
 
-.logo-img {
-  height: 22px;
-  width: auto;
-  display: block;
-}
+.logo-img { height: 20px; width: auto; display: block; }
 
 .logo-divider {
   font-family: 'JetBrains Mono', monospace;
-  font-size: 15px;
-  color: var(--border2);
-  font-weight: 400;
-  line-height: 1;
+  font-size: 14px;
+  color: #3a5068;
 }
 
 .logo-product {
   font-family: 'JetBrains Mono', monospace;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 500;
-  color: var(--muted);
+  color: #7d90a4;
   letter-spacing: 0.04em;
-  line-height: 1;
+}
+
+.topbar-meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
 
 .polling-dot {
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: var(--muted);
-  transition: background 0.3s;
+  background: #3a5068;
   flex-shrink: 0;
+  transition: background 0.3s;
 }
 
 .polling-dot.active {
-  background: var(--blue);
-  box-shadow: 0 0 6px var(--blue);
-  animation: topbar-blink 1s ease-in-out infinite;
+  background: #0096c7;
+  box-shadow: 0 0 6px #0096c7;
+  animation: blink 1s ease-in-out infinite;
 }
 
-@keyframes topbar-blink {
+@keyframes blink {
   0%, 100% { opacity: 1; }
   50%       { opacity: 0.2; }
 }
 
+.server-count,
+.last-polled {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  color: #7d90a4;
+  white-space: nowrap;
+}
+
+.server-count .mdi,
+.last-polled .mdi {
+  font-size: 14px;
+}
+
 .proxy-warn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
   font-family: 'JetBrains Mono', monospace;
   font-size: 11px;
   color: var(--warn);
@@ -171,39 +191,21 @@ const formattedTime = computed(() => {
   border: 1px solid rgba(245, 158, 11, 0.3);
   border-radius: 4px;
   padding: 2px 8px;
-  cursor: default;
 }
 
 .topbar-right {
   display: flex;
   align-items: center;
-  gap: 14px;
-  min-width: 0;
+  gap: 8px;
+  flex-shrink: 0;
 }
 
-.server-count {
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 12px;
-  color: var(--muted);
-  white-space: nowrap;
-}
-
-.last-polled {
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 12px;
-  color: var(--muted);
-  white-space: nowrap;
-}
-
-.last-polled time {
-  color: var(--text);
-}
-
-.refresh-btn {
+/* Ghost button (Refresh) */
+.btn-ghost {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 6px 14px;
+  padding: 6px 12px;
   background: var(--surface2);
   border: 1px solid var(--border2);
   border-radius: 6px;
@@ -211,37 +213,21 @@ const formattedTime = computed(() => {
   font-family: 'Syne', sans-serif;
   font-size: 13px;
   cursor: pointer;
-  transition: background 0.15s, border-color 0.15s;
   white-space: nowrap;
-  flex-shrink: 0;
+  transition: background 0.15s, border-color 0.15s;
 }
 
-.refresh-btn:hover:not(:disabled) {
+.btn-ghost:hover:not(:disabled) {
   background: var(--border);
   border-color: var(--blue);
 }
 
-.refresh-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
+.btn-ghost:disabled { opacity: 0.45; cursor: not-allowed; }
 
-.refresh-icon {
-  font-size: 16px;
-  display: inline-block;
-  line-height: 1;
-}
+.btn-ghost .mdi { font-size: 16px; }
 
-.refresh-icon.spinning {
-  animation: topbar-spin 1s linear infinite;
-}
-
-@keyframes topbar-spin {
-  from { transform: rotate(0deg); }
-  to   { transform: rotate(360deg); }
-}
-
-.add-btn {
+/* Primary button (Add Server) */
+.btn-primary {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -255,41 +241,14 @@ const formattedTime = computed(() => {
   font-weight: 600;
   cursor: pointer;
   white-space: nowrap;
-  flex-shrink: 0;
   transition: opacity 0.15s;
 }
 
-.add-btn:hover {
-  opacity: 0.85;
-}
+.btn-primary:hover { opacity: 0.85; }
+.btn-primary .mdi { font-size: 16px; }
 
-.icon-action-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 6px 12px;
-  background: var(--surface2);
-  border: 1px solid var(--border2);
-  border-radius: 6px;
-  color: var(--muted);
-  font-family: 'Syne', sans-serif;
-  font-size: 12px;
-  cursor: pointer;
-  white-space: nowrap;
-  flex-shrink: 0;
-  transition: color 0.15s, border-color 0.15s;
-}
-
-.icon-action-btn:hover {
-  color: var(--text);
-  border-color: var(--blue);
-}
-
-.hidden-file {
-  display: none;
-}
-
-.theme-btn {
+/* Icon-only button */
+.btn-icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -299,14 +258,35 @@ const formattedTime = computed(() => {
   border: 1px solid var(--border2);
   border-radius: 6px;
   color: var(--muted);
-  font-size: 15px;
+  font-size: 18px;
   cursor: pointer;
   flex-shrink: 0;
-  transition: color 0.15s, border-color 0.15s, background 0.15s;
+  transition: color 0.15s, border-color 0.15s;
 }
 
-.theme-btn:hover {
+.btn-icon:hover {
   color: var(--text);
   border-color: var(--blue);
+}
+
+.spinning { animation: spin 1s linear infinite; }
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+.hidden-file { display: none; }
+
+/* Responsive: hide text labels on small screens */
+@media (max-width: 800px) {
+  .btn-label { display: none; }
+  .btn-ghost, .btn-primary { padding: 6px 10px; }
+  .topbar-meta .last-polled { display: none; }
+}
+
+@media (max-width: 560px) {
+  .topbar-meta .server-count { display: none; }
+  .logo-product { display: none; }
 }
 </style>

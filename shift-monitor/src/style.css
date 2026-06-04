@@ -60,16 +60,26 @@ body {
 
 .main {
   flex: 1;
-  max-width: 1200px;
   width: 100%;
-  margin: 0 auto;
-  padding: 24px 16px;
+  padding: 20px 24px;
 }
 
 .server-list {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: 1fr;
   gap: 16px;
+}
+
+@media (min-width: 1400px) {
+  .server-list {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 600px) {
+  .main {
+    padding: 12px 10px;
+  }
 }
 
 ::-webkit-scrollbar {

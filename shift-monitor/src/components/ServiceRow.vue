@@ -1,25 +1,25 @@
 <template>
   <div class="service-row" :class="rowStatusClass">
     <!-- 1. Service name -->
-    <span class="svc-name" :title="service.name">{{ service.name }}</span>
+    <span class="svc-name" :title="service.name">
+      <i class="mdi" :class="langIcon" :title="langLabel"></i>
+      {{ service.name }}
+    </span>
 
-    <!-- 2. Language badge -->
-    <span class="lang-badge" :class="`lang-${service.language}`">{{ langLabel }}</span>
-
-    <!-- 3. Status badge -->
-    <span class="status-badge" :class="badgeStatusClass">
-      <span class="status-dot"></span>
+    <!-- 2. Status pill -->
+    <span class="status-pill" :class="pillClass">
+      <i class="mdi" :class="statusIcon"></i>
       {{ statusLabel }}
     </span>
 
-    <!-- 4. HTTP status code -->
-    <span class="http-code">{{ result?.code ? result.code : '—' }}</span>
+    <!-- 3. HTTP status code -->
+    <span class="http-code" :class="codeClass">{{ result?.code ?? '—' }}</span>
 
-    <!-- 5. Latency -->
+    <!-- 4. Latency -->
     <span class="latency" :class="latencyClass">{{ latencyLabel }}</span>
 
-    <!-- 6. Sparkbar — 72 hourly buckets covering 3 days -->
-    <span class="sparkbar" aria-label="3-day history (1 segment = 1 hour)">
+    <!-- 5. Sparkbar — 72 hourly buckets = 3 days -->
+    <span class="sparkbar" aria-label="3-day history">
       <span
         v-for="(entry, i) in hourlyHistory"
         :key="i"
@@ -28,14 +28,14 @@
       ></span>
     </span>
 
-    <!-- 7. Manual check button -->
+    <!-- 6. Manual check button -->
     <button
       class="check-btn"
       :class="{ flash: flashing }"
-      title="Check this service now"
+      title="Check now"
       @click="handleCheck"
     >
-      check
+      <i class="mdi mdi-refresh"></i>
     </button>
   </div>
 </template>
@@ -55,9 +55,7 @@ const flashing = ref(false)
 function handleCheck() {
   emit('check')
   flashing.value = true
-  setTimeout(() => {
-    flashing.value = false
-  }, 600)
+  setTimeout(() => { flashing.value = false }, 600)
 }
 
 const LANG_LABELS = {
@@ -73,22 +71,43 @@ const LANG_LABELS = {
   generic: 'HTTP',
 }
 
+const LANG_ICONS = {
+  java:    'mdi-language-java',
+  node:    'mdi-nodejs',
+  python:  'mdi-language-python',
+  go:      'mdi-language-go',
+  ruby:    'mdi-language-ruby',
+  php:     'mdi-language-php',
+  rust:    'mdi-language-rust',
+  dotnet:  'mdi-dot-net',
+  elixir:  'mdi-code-braces',
+  generic: 'mdi-web',
+}
+
 const langLabel = computed(() => LANG_LABELS[props.service.language] ?? props.service.language)
+const langIcon  = computed(() => LANG_ICONS[props.service.language]  ?? 'mdi-code-braces')
 
 const rowStatusClass = computed(() => {
   const s = props.result?.status
-  if (s === 'up')   return 'row-up'
   if (s === 'down') return 'row-down'
   if (s === 'warn') return 'row-warn'
-  return 'row-unknown'
+  return ''
 })
 
-const badgeStatusClass = computed(() => {
+const pillClass = computed(() => {
   const s = props.result?.status
-  if (s === 'up')   return 'badge-up'
-  if (s === 'down') return 'badge-down'
-  if (s === 'warn') return 'badge-warn'
-  return 'badge-unknown'
+  if (s === 'up')   return 'pill-up'
+  if (s === 'down') return 'pill-down'
+  if (s === 'warn') return 'pill-warn'
+  return 'pill-unknown'
+})
+
+const statusIcon = computed(() => {
+  const s = props.result?.status
+  if (s === 'up')   return 'mdi-check-circle'
+  if (s === 'down') return 'mdi-close-circle'
+  if (s === 'warn') return 'mdi-alert'
+  return 'mdi-help-circle-outline'
 })
 
 const statusLabel = computed(() => {
@@ -99,11 +118,19 @@ const statusLabel = computed(() => {
   return '—'
 })
 
+const codeClass = computed(() => {
+  const c = props.result?.code
+  if (!c) return 'code-muted'
+  if (c >= 200 && c < 300) return 'code-ok'
+  if (c >= 400 && c < 500) return 'code-warn'
+  return 'code-err'
+})
+
 const latencyClass = computed(() => {
   const ms = props.result?.latency
   if (ms === null || ms === undefined) return 'lat-muted'
-  if (ms < 200)  return 'lat-up'
-  if (ms < 800)  return 'lat-warn'
+  if (ms < 200) return 'lat-up'
+  if (ms < 800) return 'lat-warn'
   return 'lat-down'
 })
 
@@ -113,13 +140,11 @@ const latencyLabel = computed(() => {
   return `${ms}ms`
 })
 
-// Group 864 raw polls into 72 hourly buckets (12 polls per hour).
-// Each bucket shows the worst status in that hour: down > warn > up > unknown > empty.
-const BUCKET_SIZE   = 12  // polls per hour at 5-min interval
-const DISPLAY_BUCKETS = 72  // 3 days
+const BUCKET_SIZE    = 12
+const DISPLAY_BUCKETS = 72
 
 const hourlyHistory = computed(() => {
-  const hist   = props.result?.history ?? []
+  const hist    = props.result?.history ?? []
   const buckets = []
 
   for (let i = 0; i < hist.length; i += BUCKET_SIZE) {
@@ -139,156 +164,99 @@ const hourlyHistory = computed(() => {
 <style scoped>
 .service-row {
   display: grid;
-  grid-template-columns: 190px 84px 100px 64px 88px 1fr 68px;
+  grid-template-columns: minmax(140px, 2fr) 90px 56px 76px 1fr 38px;
   align-items: center;
-  padding: 10px 16px;
+  padding: 9px 16px;
   border-bottom: 1px solid var(--border);
+  gap: 8px;
   transition: background 0.15s;
 }
 
-.service-row:last-child {
-  border-bottom: none;
-}
-
-.service-row:hover {
-  background: var(--surface2);
-}
+.service-row:last-child { border-bottom: none; }
+.service-row:hover      { background: var(--surface2); }
 
 .row-down { background: rgba(239, 68, 68, 0.06); }
 .row-warn { background: rgba(245, 158, 11, 0.06); }
 .row-down:hover { background: rgba(239, 68, 68, 0.12); }
 .row-warn:hover { background: rgba(245, 158, 11, 0.10); }
 
-/* --- 1. Service name --- */
+/* 1. Service name */
 .svc-name {
+  display: flex;
+  align-items: center;
+  gap: 7px;
   font-family: 'JetBrains Mono', monospace;
   font-size: 13px;
   color: var(--text);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  padding-right: 8px;
 }
 
-/* --- 2. Language badge --- */
-.lang-badge {
+.svc-name .mdi {
+  font-size: 15px;
+  color: var(--muted);
+  flex-shrink: 0;
+}
+
+/* 2. Status pill */
+.status-pill {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: fit-content;
-  font-family: 'Syne', sans-serif;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: 20px;
+  font-family: 'JetBrains Mono', monospace;
   font-size: 10px;
   font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  padding: 2px 7px;
-  border-radius: 4px;
+  letter-spacing: 0.06em;
   white-space: nowrap;
 }
 
-.lang-java {
-  background: rgba(249, 115, 22, 0.15);
-  color: #fb923c;
-  border: 1px solid rgba(249, 115, 22, 0.28);
+.status-pill .mdi { font-size: 13px; }
+
+.pill-up {
+  background: rgba(34, 197, 94, 0.12);
+  color: var(--up);
+  border: 1px solid rgba(34, 197, 94, 0.28);
 }
 
-.lang-node {
-  background: rgba(234, 179, 8, 0.15);
-  color: #fbbf24;
-  border: 1px solid rgba(234, 179, 8, 0.28);
+.pill-down {
+  background: rgba(239, 68, 68, 0.12);
+  color: var(--down);
+  border: 1px solid rgba(239, 68, 68, 0.28);
 }
 
-.lang-python {
-  background: rgba(99, 102, 241, 0.15);
-  color: #818cf8;
-  border: 1px solid rgba(99, 102, 241, 0.28);
+.pill-warn {
+  background: rgba(245, 158, 11, 0.12);
+  color: var(--warn);
+  border: 1px solid rgba(245, 158, 11, 0.28);
 }
 
-.lang-go {
-  background: rgba(6, 182, 212, 0.15);
-  color: #22d3ee;
-  border: 1px solid rgba(6, 182, 212, 0.28);
+.pill-unknown {
+  background: rgba(125, 144, 164, 0.08);
+  color: var(--muted);
+  border: 1px solid rgba(125, 144, 164, 0.2);
 }
 
-.lang-ruby {
-  background: rgba(220, 38, 38, 0.15);
-  color: #f87171;
-  border: 1px solid rgba(220, 38, 38, 0.28);
-}
-
-.lang-php {
-  background: rgba(139, 92, 246, 0.15);
-  color: #a78bfa;
-  border: 1px solid rgba(139, 92, 246, 0.28);
-}
-
-.lang-rust {
-  background: rgba(234, 88, 12, 0.15);
-  color: #fb923c;
-  border: 1px solid rgba(234, 88, 12, 0.28);
-}
-
-.lang-dotnet {
-  background: rgba(99, 102, 241, 0.15);
-  color: #a5b4fc;
-  border: 1px solid rgba(99, 102, 241, 0.28);
-}
-
-.lang-elixir {
-  background: rgba(168, 85, 247, 0.15);
-  color: #c084fc;
-  border: 1px solid rgba(168, 85, 247, 0.28);
-}
-
-.lang-generic {
-  background: rgba(100, 116, 139, 0.15);
-  color: #94a3b8;
-  border: 1px solid rgba(100, 116, 139, 0.28);
-}
-
-/* --- 3. Status badge --- */
-.status-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-}
-
-.status-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  flex-shrink: 0;
-  background: var(--muted);
-}
-
-/* Dot colors via parent row class */
-.row-up   .status-dot { background: var(--up);   box-shadow: 0 0 6px var(--up); }
-.row-down .status-dot { background: var(--down); box-shadow: 0 0 6px var(--down); }
-.row-warn .status-dot { background: var(--warn); box-shadow: 0 0 6px var(--warn); }
-
-/* Badge text color via badge class */
-.badge-up      { color: var(--up); }
-.badge-down    { color: var(--down); }
-.badge-warn    { color: var(--warn); }
-.badge-unknown { color: var(--muted); }
-
-/* --- 4. HTTP code --- */
+/* 3. HTTP code */
 .http-code {
   font-family: 'JetBrains Mono', monospace;
   font-size: 12px;
-  color: var(--muted);
+  text-align: center;
 }
 
-/* --- 5. Latency --- */
+.code-ok   { color: var(--up); }
+.code-warn { color: var(--warn); }
+.code-err  { color: var(--down); }
+.code-muted { color: var(--muted); }
+
+/* 4. Latency */
 .latency {
   font-family: 'JetBrains Mono', monospace;
   font-size: 12px;
   text-align: right;
-  padding-right: 14px;
 }
 
 .lat-up    { color: var(--up); }
@@ -296,7 +264,7 @@ const hourlyHistory = computed(() => {
 .lat-down  { color: var(--down); }
 .lat-muted { color: var(--muted); }
 
-/* --- 6. Sparkbar --- */
+/* 5. Sparkbar */
 .sparkbar {
   display: flex;
   align-items: center;
@@ -306,39 +274,43 @@ const hourlyHistory = computed(() => {
 
 .spark-seg {
   width: 3px;
-  height: 16px;
-  border-radius: 1px;
+  height: 18px;
+  border-radius: 1.5px;
   flex-shrink: 0;
 }
 
-.spark-up      { background: var(--up);   opacity: 0.75; }
-.spark-warn    { background: var(--warn); opacity: 0.85; }
-.spark-down    { background: var(--down); opacity: 0.9; }
+.spark-up      { background: var(--up);      opacity: 0.8; }
+.spark-warn    { background: var(--warn);    opacity: 0.9; }
+.spark-down    { background: var(--down);    opacity: 0.95; }
 .spark-unknown { background: var(--border2); opacity: 0.5; }
-.spark-empty   { background: var(--border);  opacity: 0.35; }
+.spark-empty   { background: var(--border);  opacity: 0.3; }
 
-/* --- 7. Check button --- */
+/* 6. Check button */
 .check-btn {
-  justify-self: end;
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 11px;
-  padding: 4px 10px;
-  background: var(--surface2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  background: transparent;
   border: 1px solid var(--border2);
-  border-radius: 4px;
+  border-radius: 6px;
   color: var(--muted);
+  font-size: 16px;
   cursor: pointer;
   transition: color 0.15s, border-color 0.15s, background 0.15s;
+  justify-self: end;
 }
 
 .check-btn:hover {
   color: var(--blue);
   border-color: var(--blue);
+  background: rgba(0, 150, 199, 0.08);
 }
 
 .check-btn.flash {
   color: var(--blue);
-  background: rgba(0, 150, 199, 0.15);
+  background: rgba(0, 150, 199, 0.18);
   border-color: var(--blue);
   transition: none;
 }
