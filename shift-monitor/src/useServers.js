@@ -14,6 +14,7 @@ export const HEALTH_PATHS = {
 }
 
 export function svcUrl(server, svc) {
+  if (svc.checkUrl) return svc.checkUrl
   return `http://${server.privateIp}:${svc.port}${svc.healthPath}`
 }
 

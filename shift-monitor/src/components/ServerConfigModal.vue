@@ -129,10 +129,21 @@
                 </button>
               </div>
 
+              <!-- check URL override -->
+              <div class="check-url-row">
+                <span class="url-label">Check URL</span>
+                <input
+                  v-model="svc.checkUrl"
+                  type="text"
+                  placeholder="https://dev-api.shiftcims.com/health  (optional — overrides auto-built URL)"
+                  class="input mono check-url-input"
+                />
+              </div>
+
               <!-- derived URL preview -->
               <div class="url-preview">
-                <span class="url-label">URL:</span>
-                <code class="url-text">{{ urlPreview(svc) }}</code>
+                <span class="url-label">Will check:</span>
+                <code class="url-text" :class="{ 'url-override': svc.checkUrl }">{{ urlPreview(svc) }}</code>
               </div>
             </div>
           </div>
@@ -190,7 +201,7 @@ onMounted(() => {
     form.privateIp = props.server.publicIp || props.server.privateIp
     form.region    = props.server.region   ?? ''
     form.sshUser   = props.server.sshUser   ?? 'ec2-user'
-    form.services  = props.server.services.map((s) => ({ ...s }))
+    form.services  = props.server.services.map((s) => ({ checkUrl: '', ...s }))
   }
 })
 
@@ -217,6 +228,7 @@ function addService() {
     language:   'node',
     port:       3000,
     healthPath: HEALTH_PATHS.node,
+    checkUrl:   '',
   })
 }
 
@@ -238,10 +250,10 @@ function autoPath(svc) {
 }
 
 function urlPreview(svc) {
+  if (svc.checkUrl) return svc.checkUrl
   if (!form.privateIp || !svc.port) return '—'
-  const host = form.privateIp
   const path = svc.healthPath || HEALTH_PATHS[svc.language] || '/health'
-  return `http://${host}:${svc.port}${path}`
+  return `http://${form.privateIp}:${svc.port}${path}`
 }
 
 function uid() {
@@ -261,6 +273,7 @@ function save() {
       language:   s.language,
       port:       Number(s.port),
       healthPath: s.healthPath || HEALTH_PATHS[s.language],
+      checkUrl:   s.checkUrl?.trim() || undefined,
     })),
   })
 }
@@ -530,6 +543,18 @@ function save() {
   background: rgba(239, 68, 68, 0.1);
 }
 
+.check-url-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.check-url-input {
+  flex: 1;
+  font-size: 11px;
+  padding: 5px 8px;
+}
+
 .url-preview {
   display: flex;
   align-items: center;
@@ -553,6 +578,10 @@ function save() {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.url-text.url-override {
+  color: var(--blue);
 }
 
 /* footer */
