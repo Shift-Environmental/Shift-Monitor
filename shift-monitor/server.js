@@ -9,7 +9,7 @@ import nodemailer from 'nodemailer'
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url))
 const DIST        = join(__dirname, 'dist')
-const CONFIG_FILE = join(__dirname, 'config.json')
+const CONFIG_FILE = process.env.CONFIG_FILE || join(__dirname, 'config.json')
 const PORT = Number(process.env.PORT) || 4173
 const WARN_LATENCY_MS = 1500
 
@@ -41,6 +41,9 @@ const ALERT_TO     = (process.env.ALERT_TO || '').split(',').map(s => s.trim()).
 
 const MONITOR_INTERVAL_MS = Number(process.env.MONITOR_INTERVAL_MS) || 60_000
 const FLAP_DOWN_COUNT     = 3  // consecutive downs before alerting
+
+const SLACK_WEBHOOK_URL = process.env.SLACK_WEBHOOK_URL || ''
+const TEAMS_WEBHOOK_URL = process.env.TEAMS_WEBHOOK_URL || ''
 
 // ── IP whitelist ──────────────────────────────────────────────────────────────
 
@@ -117,13 +120,68 @@ const mailer = alertsEnabled
   : null
 
 async function sendAlert(subject, text) {
-  if (!mailer) return
-  try {
-    await mailer.sendMail({ from: ALERT_FROM, to: ALERT_TO.join(', '), subject, text })
-    console.log(`[alert] sent → ${subject}`)
-  } catch (err) {
-    console.error('[alert] email failed:', err.message)
+  const tasks = []
+
+  if (mailer) {
+    tasks.push(
+      mailer.sendMail({ from: ALERT_FROM, to: ALERT_TO.join(', '), subject, text })
+        .then(() => console.log(`[alert] email sent → ${subject}`))
+        .catch(err => console.error('[alert] email failed:', err.message))
+    )
   }
+
+  if (SLACK_WEBHOOK_URL) {
+    tasks.push(
+      fetch(SLACK_WEBHOOK_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: `*${subject}*\n${text}` }),
+        signal: AbortSignal.timeout(5000),
+      })
+        .then(() => console.log(`[alert] slack sent → ${subject}`))
+        .catch(err => console.error('[alert] slack failed:', err.message))
+    )
+  }
+
+  if (TEAMS_WEBHOOK_URL) {
+    tasks.push(
+      fetch(TEAMS_WEBHOOK_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'message',
+          attachments: [{
+            contentType: 'application/vnd.microsoft.card.adaptive',
+            content: {
+              '$schema': 'http://adaptivecards.io/schemas/adaptive-card.json',
+              type: 'AdaptiveCard', version: '1.4',
+              body: [
+                {
+                  type: 'TextBlock',
+                  text: `🔴 ${subject}`,
+                  weight: 'bolder',
+                  size: 'medium',
+                  color: 'attention',
+                  wrap: true,
+                },
+                {
+                  type: 'TextBlock',
+                  text: text.replace(/\n/g, '  \n'),
+                  wrap: true,
+                  spacing: 'small',
+                },
+              ],
+            },
+          }],
+        }),
+        signal: AbortSignal.timeout(5000),
+      })
+        .then(() => console.log(`[alert] teams sent → ${subject}`))
+        .catch(err => console.error('[alert] teams failed:', err.message))
+    )
+  }
+
+  await Promise.allSettled(tasks)
 }
 
 // ── background monitor + flap detection ──────────────────────────────────────
@@ -136,7 +194,7 @@ async function sendAlert(subject, text) {
 const serviceState = new Map()
 
 function getState(key) {
-  if (!serviceState.has(key)) serviceState.set(key, { history: [], alertSent: false })
+  if (!serviceState.has(key)) serviceState.set(key, { history: [], alertSent: false, downSince: null })
   return serviceState.get(key)
 }
 
@@ -146,9 +204,12 @@ function recordStatus(key, status) {
   if (state.history.length > 5) state.history.shift()
 
   if (status !== 'down') {
-    state.alertSent = false  // recovery — reset so next outage re-alerts
+    state.alertSent = false
+    state.downSince = null  // service recovered — reset
     return null
   }
+
+  if (!state.downSince) state.downSince = Date.now()
 
   const confirmedDown =
     state.history.length >= FLAP_DOWN_COUNT &&
@@ -162,6 +223,13 @@ function recordStatus(key, status) {
   return null
 }
 
+function downDuration(key) {
+  const since = getState(key).downSince
+  if (!since) return `${FLAP_DOWN_COUNT} min`
+  const mins = Math.round((Date.now() - since) / 60_000)
+  return mins <= 1 ? '1 min' : `${mins} mins`
+}
+
 async function monitorCheckHttp(url) {
   const start = Date.now()
   try {
@@ -169,6 +237,8 @@ async function monitorCheckHttp(url) {
     const latency = Date.now() - start
     const code = response.status
     if (code >= 200 && code < 300) return latency > WARN_LATENCY_MS ? 'warn' : 'up'
+    if (code === 401 || code === 403) return latency > WARN_LATENCY_MS ? 'warn' : 'up'  // auth-gated = alive
+    if (code >= 300 && code < 500) return 'warn'
     return 'down'
   } catch {
     return 'down'
@@ -195,23 +265,27 @@ async function runMonitorCycle() {
     const host = server.privateIp || server.publicIp
 
     // TCP reachability (SSH port 22)
+    const pingKey    = `${server.id}/ping`
     const pingStatus = await monitorCheckTcp(host, 22)
-    if (recordStatus(`${server.id}/ping`, pingStatus) === 'alert') {
+    if (recordStatus(pingKey, pingStatus) === 'alert') {
+      const dur = downDuration(pingKey)
       await sendAlert(
-        `[Shift Monitor] ${server.name} is unreachable`,
-        `Server "${server.name}" (${host}) has failed ${FLAP_DOWN_COUNT} consecutive TCP checks.\n\nTime: ${new Date().toISOString()}`,
+        `${server.name} — server unreachable for ${dur}`,
+        `Host "${server.name}" (${host}) has failed ${FLAP_DOWN_COUNT} consecutive TCP reachability checks.\n\nDown for: ${dur}\nTime: ${new Date().toISOString()}`,
       )
     }
 
     // HTTP health checks per service
     if (!Array.isArray(server.services)) continue
     for (const svc of server.services) {
-      const url    = `http://${host}:${svc.port}${svc.healthPath || '/'}`
+      const svcKey = `${server.id}/${svc.name}`
+      const url    = svc.checkUrl || `http://${host}:${svc.port}${svc.healthPath || '/'}`
       const status = await monitorCheckHttp(url)
-      if (recordStatus(`${server.id}/${svc.name}`, status) === 'alert') {
+      if (recordStatus(svcKey, status) === 'alert') {
+        const dur = downDuration(svcKey)
         await sendAlert(
-          `[Shift Monitor] ${server.name} / ${svc.name} is down`,
-          `Service "${svc.name}" on server "${server.name}" has been down for ${FLAP_DOWN_COUNT} consecutive checks.\n\nURL: ${url}\nTime: ${new Date().toISOString()}`,
+          `${server.name} / ${svc.name} — down for ${dur}`,
+          `Service "${svc.name}" on "${server.name}" has been unresponsive for ${dur}.\n\nURL: ${url}\nTime: ${new Date().toISOString()}`,
         )
       }
     }
@@ -323,9 +397,9 @@ async function handleCheck(req, res) {
     const response = await fetch(url, { signal: AbortSignal.timeout(7000) })
     const latency = Date.now() - start
     const code = response.status
-    const status = code >= 200 && code < 300
+    const status = (code >= 200 && code < 300) || code === 401 || code === 403
       ? (latency > WARN_LATENCY_MS ? 'warn' : 'up')
-      : 'down'
+      : code >= 300 && code < 500 ? 'warn' : 'down'
     res.writeHead(200, { 'Content-Type': 'application/json' })
     res.end(JSON.stringify({ status, code, latency }))
   } catch {

@@ -71,7 +71,7 @@
         <span>Status</span>
         <span>Code</span>
         <span>Latency</span>
-        <span>History (40 polls)</span>
+        <span>History (3 days)</span>
         <span></span>
       </div>
 

@@ -14,6 +14,16 @@ function healthCheckPlugin() {
     name: 'health-check',
     configureServer(server) {
 
+      // Auth stubs — dev mode always reports auth disabled so the app loads without a login screen.
+      server.middlewares.use('/api/auth', (req, res) => {
+        res.setHeader('Content-Type', 'application/json')
+        res.end(JSON.stringify({ authEnabled: false, authenticated: true }))
+      })
+      server.middlewares.use('/api/login', (req, res) => {
+        res.setHeader('Content-Type', 'application/json')
+        res.end(JSON.stringify({ ok: true }))
+      })
+
       server.middlewares.use('/api/config', async (req, res) => {
         res.setHeader('Content-Type', 'application/json')
         if (req.method === 'GET') {
@@ -60,9 +70,9 @@ function healthCheckPlugin() {
           const response = await fetch(url, { signal: AbortSignal.timeout(7000) })
           const latency = Date.now() - start
           const code = response.status
-          const status = code >= 200 && code < 300
+          const status = (code >= 200 && code < 300) || code === 401 || code === 403
             ? (latency > WARN_LATENCY_MS ? 'warn' : 'up')
-            : 'down'
+            : code >= 300 && code < 500 ? 'warn' : 'down'
           res.setHeader('Content-Type', 'application/json')
           res.end(JSON.stringify({ status, code, latency }))
         } catch {

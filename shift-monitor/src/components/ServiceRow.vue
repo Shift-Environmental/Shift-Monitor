@@ -18,10 +18,10 @@
     <!-- 5. Latency -->
     <span class="latency" :class="latencyClass">{{ latencyLabel }}</span>
 
-    <!-- 6. Sparkbar — 40 segments, each 5×16 px -->
-    <span class="sparkbar" aria-label="Poll history">
+    <!-- 6. Sparkbar — 72 hourly buckets covering 3 days -->
+    <span class="sparkbar" aria-label="3-day history (1 segment = 1 hour)">
       <span
-        v-for="(entry, i) in paddedHistory"
+        v-for="(entry, i) in hourlyHistory"
         :key="i"
         class="spark-seg"
         :class="`spark-${entry}`"
@@ -113,11 +113,26 @@ const latencyLabel = computed(() => {
   return `${ms}ms`
 })
 
-// Pad the left side with 'empty' entries so there are always 40 columns.
-const paddedHistory = computed(() => {
-  const hist = props.result?.history ?? []
-  const padCount = Math.max(0, 40 - hist.length)
-  return [...Array(padCount).fill('empty'), ...hist]
+// Group 864 raw polls into 72 hourly buckets (12 polls per hour).
+// Each bucket shows the worst status in that hour: down > warn > up > unknown > empty.
+const BUCKET_SIZE   = 12  // polls per hour at 5-min interval
+const DISPLAY_BUCKETS = 72  // 3 days
+
+const hourlyHistory = computed(() => {
+  const hist   = props.result?.history ?? []
+  const buckets = []
+
+  for (let i = 0; i < hist.length; i += BUCKET_SIZE) {
+    const slice = hist.slice(i, i + BUCKET_SIZE)
+    if      (slice.includes('down'))    buckets.push('down')
+    else if (slice.includes('warn'))    buckets.push('warn')
+    else if (slice.includes('up'))      buckets.push('up')
+    else if (slice.includes('unknown')) buckets.push('unknown')
+    else                                buckets.push('empty')
+  }
+
+  const padCount = Math.max(0, DISPLAY_BUCKETS - buckets.length)
+  return [...Array(padCount).fill('empty'), ...buckets]
 })
 </script>
 
@@ -138,6 +153,11 @@ const paddedHistory = computed(() => {
 .service-row:hover {
   background: var(--surface2);
 }
+
+.row-down { background: rgba(239, 68, 68, 0.06); }
+.row-warn { background: rgba(245, 158, 11, 0.06); }
+.row-down:hover { background: rgba(239, 68, 68, 0.12); }
+.row-warn:hover { background: rgba(245, 158, 11, 0.10); }
 
 /* --- 1. Service name --- */
 .svc-name {
@@ -280,12 +300,12 @@ const paddedHistory = computed(() => {
 .sparkbar {
   display: flex;
   align-items: center;
-  gap: 1px;
+  gap: 0.5px;
   overflow: hidden;
 }
 
 .spark-seg {
-  width: 5px;
+  width: 3px;
   height: 16px;
   border-radius: 1px;
   flex-shrink: 0;

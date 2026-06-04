@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "start": "PORT=80 authbind --deep node server.js",
+    "start": "node server.js",
+    "start:prod": "PORT=80 authbind --deep node server.js",
     "pm2:start": "PORT=80 authbind --deep pm2 start server.js --name shift-monitor",
     "pm2:stop": "pm2 stop shift-monitor",
     "pm2:restart": "PORT=80 authbind --deep pm2 restart shift-monitor",

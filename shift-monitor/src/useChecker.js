@@ -1,9 +1,9 @@
 import { ref, computed, watch } from 'vue'
 import { useServers, svcUrl } from './useServers.js'
 
-const POLL_INTERVAL = 300_000
-const HISTORY_SIZE = 40
-const LS_HISTORY_KEY = 'shift-history'
+const POLL_INTERVAL   = 300_000
+const HISTORY_SIZE    = 864   // 3 days at 5-min polls (72 h × 12 checks/h)
+const LS_HISTORY_KEY  = 'shift-history'
 const LS_PING_KEY    = 'shift-ping-history'
 
 const { servers } = useServers()

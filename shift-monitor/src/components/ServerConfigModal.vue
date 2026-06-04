@@ -31,15 +31,15 @@
               <input
                 v-model="form.privateIp"
                 type="text"
-                placeholder="10.0.1.42 or 3.87.172.0"
+                placeholder="10.0.1.42  or  ec2-1-2-3-4.compute.amazonaws.com"
                 class="input mono"
                 :class="{ error: touched.privateIp && !validIp }"
                 @blur="touched.privateIp = true"
               />
               <span v-if="touched.privateIp && !validIp" class="field-error">
-                Enter a valid IPv4 address
+                Enter a valid IP address or hostname
               </span>
-              <span v-else class="field-hint">IP reachable from where shift/monitor runs — private IP if on same network, public IP if remote</span>
+              <span v-else class="field-hint">IP or hostname reachable from where shift/monitor runs</span>
             </label>
             <label class="field">
               <span class="field-label">Region</span>
@@ -205,13 +205,15 @@ onMounted(() => {
   }
 })
 
-// Loose IPv4 validation — accepts any dotted-quad that looks reasonable.
+// Accepts IPv4 addresses OR hostnames (EC2 DNS, domain names, etc.)
 const validIp = computed(() => {
   const v = form.privateIp.trim()
   if (!v) return false
-  const parts = v.split('.')
-  if (parts.length !== 4) return false
-  return parts.every((p) => /^\d{1,3}$/.test(p) && Number(p) <= 255)
+  // IPv4: four dotted octets
+  const ipParts = v.split('.')
+  if (ipParts.length === 4 && ipParts.every((p) => /^\d{1,3}$/.test(p) && Number(p) <= 255)) return true
+  // Hostname: letters, digits, hyphens, dots — no spaces
+  return /^[a-zA-Z0-9]([a-zA-Z0-9\-\.]*[a-zA-Z0-9])?$/.test(v)
 })
 
 const canSave = computed(() => {
