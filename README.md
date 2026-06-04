@@ -122,7 +122,7 @@ For HTTPS or domain-based endpoints, set a **Check URL** on the service — it o
 ### Deploy latest code
 
 ```bash
-ssh -i "~/.ssh/shift-monitor.pem" admin@ec2-16-174-98-31.ca-west-1.compute.amazonaws.com
+ssh -i "~/.ssh/shift-monitor.pem" admin@<monitor-server>
 ~/Shift-Monitor/deploy.sh
 ```
 
