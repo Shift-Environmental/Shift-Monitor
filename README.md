@@ -1,176 +1,186 @@
-# shift-monitor
+# Shift Monitor
 
-A dark-terminal server health dashboard built with Vue 3 + Vite. Polls HTTP health endpoints across multiple EC2 instances, visualises status history as sparkbars, and persists history across page refreshes via localStorage.
+Server health dashboard for Shift Coastal Technologies. Built with Vue 3 + Vite, backed by a Node.js server that proxies health checks, stores config, and sends alerts.
+
+**Live:** https://monitor.shiftcims.com — password protected
 
 ---
 
-## 1. Local dev setup
+## What it does
+
+- Polls HTTP health endpoints and TCP reachability (port 22) for every configured server
+- Displays live status, response codes, latency, and a 3-day sparkbar history (one bar = 1 hour)
+- Stores all server config server-side — every team member sees the same state
+- Sends Teams (and optionally Slack/email) alerts after 2 consecutive failures (~10 min downtime)
+- Password-protected login with 24-hour session cookies
+- Light and dark mode, per-browser preference
+
+---
+
+## Architecture
+
+```
+Browser (Vue 3 SPA)
+  │  POST /api/check    — proxied HTTP health check
+  │  POST /api/ping     — proxied TCP reachability check
+  │  GET/POST /api/config — read/write server list
+  │  POST /api/login    — session auth
+  ▼
+server.js (Node.js, port 4173)
+  │  serves dist/
+  │  handles all /api/* routes
+  │  runs background monitor every 5 min → sends alerts
+  ▼
+nginx (port 80/443) → reverse proxy → server.js
+```
+
+Config is stored at `~/shift-data/config.json` — outside the repo so deploys never touch it.
+
+---
+
+## Local development
 
 ```bash
+cd shift-monitor
 npm install
-npm run dev
+npm run dev        # Vite dev server at http://localhost:3000
 ```
 
-The dev server starts at `http://localhost:5173`. Mock mode is on by default (`VITE_MOCK=true`), so no real servers are required — the dashboard immediately shows simulated traffic with intentional flakiness on `ml-inference`, `report-builder`, and `notification-svc`.
+Auth is disabled in dev mode — the Vite plugin stubs `/api/auth` to return `{ authEnabled: false }`. Config reads/writes go to `shift-monitor/config.json` locally.
+
+To run the full production server locally:
+
+```bash
+cp .env.example .env   # set ACCESS_PASSWORD etc.
+npm start              # node server.js on port 4173
+```
 
 ---
 
-## 2. Adding real endpoints (`servers.js`)
+## Environment variables (`.env`)
 
-Open `src/servers.js` and edit the `servers` array. Each server has:
-
-```js
-{
-  id: 'my-server-1',        // unique slug used as a key
-  name: 'my-server-1',      // display name
-  privateIp: '10.0.0.1',    // shown in the header (informational only)
-  region: 'us-east-1',      // shown as a badge
-  services: [
-    {
-      name: 'my-api',            // display name
-      language: 'node',          // 'java' | 'node' | 'python' | 'go'
-      url: 'http://10.0.0.1:3000/health',  // full URL polled by fetch()
-      port: 3000,                // informational only
-    },
-  ],
-}
-```
-
-**Health endpoint conventions:**
-
-| Language | Path | Expected response |
+| Variable | Description | Default |
 |---|---|---|
-| Java (Spring Boot) | `/actuator/health` | `{ "status": "UP" }` |
-| Node.js | `/health` | any 2xx |
-| Python Flask/FastAPI | `/health` | any 2xx |
-| Go | `/healthz` | any 2xx |
-
-Any 2xx response is treated as **UP**. A non-2xx or network error is **DOWN**. A 2xx with latency > 1 500 ms is **WARN**.
-
----
-
-## 3. Switching to real HTTP checks
-
-1. Set `VITE_MOCK=false` in `.env` (for dev) **or** run a production build (`.env.production` already sets `VITE_MOCK=false`).
-2. Make sure the dashboard host can reach your server IPs (same VPC, VPN, or bastion).
-3. Restart the dev server (`npm run dev`) — the composable will now call `fetch()` against the real URLs.
-
-CORS note: if you're running the dashboard on a different origin than your services, add `Access-Control-Allow-Origin: *` (or the dashboard's origin) to your health endpoint responses.
+| `ACCESS_PASSWORD` | Dashboard password. Leave blank to disable auth. | *(disabled)* |
+| `ALLOWED_IPS` | Comma-separated IPs/CIDRs allowed to connect. Leave blank to allow all. | *(all)* |
+| `TRUST_PROXY` | Set `true` when behind nginx (uses `X-Forwarded-For`). | `false` |
+| `CONFIG_FILE` | Path to server config JSON. | `./config.json` |
+| `MONITOR_INTERVAL_MS` | How often the server-side monitor checks each service. | `300000` (5 min) |
+| `SLACK_WEBHOOK_URL` | Slack incoming webhook URL for alerts. | *(disabled)* |
+| `TEAMS_WEBHOOK_URL` | Microsoft Teams incoming webhook URL for alerts. | *(disabled)* |
+| `SMTP_HOST` | SMTP server for email alerts. | *(disabled)* |
+| `SMTP_PORT` | SMTP port. | `587` |
+| `SMTP_USER` | SMTP username. | — |
+| `SMTP_PASS` | SMTP password / app password. | — |
+| `ALERT_FROM` | From address for alert emails. | *(SMTP_USER)* |
+| `ALERT_TO` | Comma-separated alert recipients. | — |
 
 ---
 
-## 4. localStorage persistence
+## Alert behaviour
 
-On every poll cycle, `useChecker.js` serialises the last 40 status results per service into `localStorage` under the key **`pulse-history`**.
+The server-side background monitor runs independently of the browser. It tracks consecutive failures per service and alerts after **2 consecutive downs** (10 minutes at the default 5-minute interval).
 
-On page load, the stored history is rehydrated before the first poll fires — this means sparkbars are populated immediately on refresh rather than starting empty.
+Alert resets automatically when the service recovers — the next outage sends a fresh notification.
 
-**What's stored:** an object mapping `"serverId:serviceName"` → `string[]` where each string is `"up"`, `"warn"`, or `"down"`.
+Alert channels fire in parallel. Example Teams message:
 
-**To clear history:**
-
-```js
-// In the browser console:
-localStorage.removeItem('pulse-history')
-location.reload()
-```
-
-History is trimmed to 40 entries per service and never grows unbounded.
+> 🔴 **SFN / cloud-api — down for 10 mins**
+> Service "cloud-api" on "SFN" has been unresponsive for 10 mins.
+> URL: http://172.31.30.17:9000/api/projects
+> Time: 2026-06-04T19:24:28.000Z
 
 ---
 
-## 5. Hosting options
+## Health check behaviour
 
-### Option A — S3 + CloudFront (~$0.50/month)
+| HTTP response | Dashboard status |
+|---|---|
+| 2xx | **UP** (WARN if latency > 1500 ms) |
+| 401 / 403 | **UP** — auth-gated endpoint, service is alive |
+| 3xx / other 4xx | **WARN** — responding but no health route |
+| 5xx | **DOWN** |
+| Timeout / connection refused | **DOWN** |
 
-```bash
-npm run build          # outputs to dist/
-aws s3 sync dist/ s3://your-bucket-name --delete
+For WebSocket services (Socket.IO), use the polling transport path as the Check URL:
+```
+http://host:9001/ws/telemetry/?EIO=4&transport=polling
 ```
 
-1. Create an S3 bucket with static website hosting enabled.
-2. Create a CloudFront distribution pointing at the bucket origin.
-3. Set the default root object to `index.html` and add a custom error response: 404 → `/index.html` (200) for SPA routing.
-4. Invalidate the CloudFront cache after each deploy: `aws cloudfront create-invalidation --distribution-id XXXX --paths "/*"`.
-
-Estimated cost: S3 storage < $0.01, CloudFront free tier covers 1 TB/month for the first 12 months, then ~$0.0085/GB.
+For HTTPS or domain-based endpoints, set a **Check URL** on the service — it overrides the auto-built `http://host:port/path` URL entirely.
 
 ---
 
-### Option B — Nginx on a monitor EC2
+## Production deployment (ca-west-1 EC2)
+
+**Server:** `ec2-16-174-98-31.ca-west-1.compute.amazonaws.com`  
+**Key:** `~/.ssh/shift-monitor.pem`  
+**Repo:** `~/Shift-Monitor/`  
+**Config:** `~/shift-data/config.json` (persistent, never touched by deploys)  
+**Service:** systemd `shift-monitor.service`
+
+### Deploy latest code
 
 ```bash
-npm run build          # outputs to dist/
-rsync -avz dist/ user@monitor-host:/var/www/shift-monitor/
+ssh -i "~/.ssh/shift-monitor.pem" admin@ec2-16-174-98-31.ca-west-1.compute.amazonaws.com
+~/Shift-Monitor/deploy.sh
 ```
 
-Nginx config (`/etc/nginx/sites-available/shift-monitor`):
+`deploy.sh` does: `git pull → npm install → npm run build → systemctl restart shift-monitor`
 
-```nginx
-server {
-    listen 80;
-    server_name monitor.example.internal;
-    return 301 https://$host$request_uri;
-}
+### What deploy covers
 
-server {
-    listen 443 ssl http2;
-    server_name monitor.example.internal;
+| Change type | Covered by deploy.sh | Action needed |
+|---|---|---|
+| Source code (Vue, server.js) | ✅ | Just run deploy.sh |
+| New npm dependencies | ✅ | Just run deploy.sh |
+| `.env` changes | ❌ | Edit `~/Shift-Monitor/shift-monitor/.env` then `sudo systemctl restart shift-monitor` |
+| Server list / config | ❌ | Edit via dashboard UI or `~/shift-data/config.json` directly |
+| systemd service file | ❌ | Edit `/etc/systemd/system/shift-monitor.service` then `sudo systemctl daemon-reload && sudo systemctl restart shift-monitor` |
+| nginx config | ❌ | Edit `/etc/nginx/sites-available/shift-monitor` then `sudo nginx -t && sudo systemctl reload nginx` |
 
-    ssl_certificate     /etc/letsencrypt/live/monitor.example.internal/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/monitor.example.internal/privkey.pem;
-
-    root /var/www/shift-monitor;
-    index index.html;
-
-    location / {
-        try_files $uri $uri/ /index.html;
-    }
-
-    gzip on;
-    gzip_types text/css application/javascript application/json image/svg+xml;
-    gzip_min_length 1024;
-
-    add_header X-Frame-Options SAMEORIGIN;
-    add_header X-Content-Type-Options nosniff;
-}
-```
-
-SSL via Certbot:
+### Useful server commands
 
 ```bash
-sudo apt install certbot python3-certbot-nginx
-sudo certbot --nginx -d monitor.example.internal
-```
-
-Symlink and reload:
-
-```bash
-sudo ln -s /etc/nginx/sites-available/shift-monitor /etc/nginx/sites-enabled/
-sudo nginx -t && sudo systemctl reload nginx
+sudo systemctl status shift-monitor      # service status
+sudo journalctl -u shift-monitor -f      # live logs
+sudo systemctl restart shift-monitor     # restart
+cat ~/shift-data/config.json             # view server config
+cat ~/Shift-Monitor/shift-monitor/.env   # view env config
 ```
 
 ---
 
-### Option C — GitHub Pages (free)
+## Adding a server
 
-Good for internal tools accessible behind a VPN-gated GitHub org.
+1. Open https://monitor.shiftcims.com and log in
+2. Click **+ Add Server** — enter the host (IP or hostname) and SSH user
+3. Click **+ Add Service** for each process to monitor
+4. For services without a `/health` endpoint, set a **Check URL** to override the auto-built URL
 
-```bash
-npm run build
-# install gh-pages helper once
-npm install -D gh-pages
-npx gh-pages -d dist
+Config saves immediately and is visible to all users on the team.
+
+---
+
+## Repo structure
+
 ```
-
-Or add to `package.json`:
-
-```json
-"scripts": {
-  "deploy": "npm run build && gh-pages -d dist"
-}
+Shift-Monitor/
+├── shift-monitor/
+│   ├── src/
+│   │   ├── App.vue
+│   │   ├── useServers.js       # server config, /api/config
+│   │   ├── useChecker.js       # polling, history, ping
+│   │   ├── useTheme.js         # light/dark mode
+│   │   └── components/
+│   │       ├── TopBar.vue
+│   │       ├── ServerGroup.vue
+│   │       ├── ServiceRow.vue
+│   │       ├── ServerConfigModal.vue
+│   │       ├── LoginOverlay.vue
+│   │       └── ...
+│   ├── server.js               # production Node.js server + background monitor
+│   ├── vite.config.js          # dev server with API stubs
+│   └── package.json
+└── deploy.sh                   # git pull + build + restart
 ```
-
-Then run `npm run deploy`. GitHub Pages serves the `gh-pages` branch automatically.
-
-If your repo is at `github.com/org/shift-monitor`, the site will be at `https://org.github.io/shift-monitor/`. Set `base: '/shift-monitor/'` in `vite.config.js` if assets 404 due to the subpath.
