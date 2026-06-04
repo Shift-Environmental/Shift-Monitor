@@ -87,7 +87,7 @@ import LoginOverlay from './components/LoginOverlay.vue'
 const { servers, whenReady, addServer, updateServer, removeServer, reloadServers } = useServers()
 const {
   results, pingResults, pingHistories, lastPolled, isPolling, proxyOnline,
-  summary, pollAll, pollOne, startPolling, stopPolling,
+  sessionExpired, summary, pollAll, pollOne, startPolling, stopPolling,
 } = useChecker()
 const { groups } = useGroups()
 
@@ -96,6 +96,14 @@ const modalOpen      = ref(false)
 const editingServer  = ref(null)
 const groupModalOpen = ref(false)
 const showLogin      = ref(false)
+
+// Session expired mid-poll → show login overlay immediately, stop polling.
+watch(sessionExpired, (expired) => {
+  if (expired) {
+    stopPolling()
+    showLogin.value = true
+  }
+})
 
 // Reset filter if the active group is deleted.
 watch(groups, (newGroups) => {
@@ -189,6 +197,7 @@ async function checkAuth() {
 }
 
 async function onAuthenticated() {
+  sessionExpired.value = false
   showLogin.value = false
   await reloadServers()
   stopPolling()

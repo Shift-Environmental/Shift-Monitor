@@ -9,13 +9,14 @@ const LS_PING_KEY    = 'shift-ping-history'
 const { servers } = useServers()
 
 // Module-level singleton — every useChecker() call shares these refs.
-const results       = ref({})
-const pingResults   = ref({})
-const pingHistories = ref({})
-const lastPolled  = ref(null)
-const isPolling   = ref(false)
-const proxyOnline = ref(true)  // false when the local proxy isn't running
-let intervalId    = null
+const results        = ref({})
+const pingResults    = ref({})
+const pingHistories  = ref({})
+const lastPolled     = ref(null)
+const isPolling      = ref(false)
+const proxyOnline    = ref(true)
+const sessionExpired = ref(false)
+let intervalId       = null
 
 function makeKey(serverId, svcName) {
   return `${serverId}:${svcName}`
@@ -53,10 +54,10 @@ async function proxyCheck(url) {
       body: JSON.stringify({ url }),
       signal: AbortSignal.timeout(8000),
     })
+    if (res.status === 401) { sessionExpired.value = true; return null }
     if (!res.ok) return { status: 'down', code: res.status, latency: 0 }
     return res.json()
   } catch {
-    // Proxy itself is unreachable (not started).
     proxyOnline.value = false
     return { status: 'down', code: 0, latency: 0, error: 'proxy offline' }
   }
@@ -124,6 +125,7 @@ async function pingServer(server) {
       body: JSON.stringify({ host, port: 22 }),
       signal: AbortSignal.timeout(8000),
     })
+    if (res.status === 401) { sessionExpired.value = true; return }
     if (!res.ok) {
       pingResults.value = { ...pingResults.value, [server.id]: { reachable: false, latency: null } }
       appendPingHistory(server.id, false)
@@ -161,9 +163,10 @@ function initResults() {
 }
 
 async function checkOne(server, svc) {
-  const key  = makeKey(server.id, svc.name)
-  const url  = svcUrl(server, svc)
+  const key     = makeKey(server.id, svc.name)
+  const url     = svcUrl(server, svc)
   const outcome = MOCK ? mockCheck(svc.name) : await proxyCheck(url)
+  if (!outcome) return  // session expired — don't update state
   const prev    = results.value[key] ?? buildEmptyResult()
   const history = [...prev.history, outcome.status].slice(-HISTORY_SIZE)
 
@@ -256,6 +259,6 @@ const summary = computed(() => {
 export function useChecker() {
   return {
     results, pingResults, pingHistories, lastPolled, isPolling, proxyOnline,
-    summary, pollAll, pollOne, startPolling, stopPolling,
+    sessionExpired, summary, pollAll, pollOne, startPolling, stopPolling,
   }
 }
