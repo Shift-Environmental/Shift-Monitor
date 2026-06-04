@@ -40,7 +40,7 @@ const ALERT_FROM   = process.env.ALERT_FROM || SMTP_USER
 const ALERT_TO     = (process.env.ALERT_TO || '').split(',').map(s => s.trim()).filter(Boolean)
 
 const MONITOR_INTERVAL_MS = Number(process.env.MONITOR_INTERVAL_MS) || 60_000
-const FLAP_DOWN_COUNT     = 3  // consecutive downs before alerting
+const FLAP_DOWN_COUNT     = 2  // consecutive downs before alerting
 
 const SLACK_WEBHOOK_URL = process.env.SLACK_WEBHOOK_URL || ''
 const TEAMS_WEBHOOK_URL = process.env.TEAMS_WEBHOOK_URL || ''
