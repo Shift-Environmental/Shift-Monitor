@@ -604,6 +604,54 @@ async function handlePing(req, res) {
   res.end(JSON.stringify(result))
 }
 
+// ── /api/detect — probe standard service ports on a host ─────────────────────
+
+const DETECT_PROBES = [
+  { name: 'cloud-api',       language: 'node',    port: 9000, healthPath: '/api/health' },
+  { name: 'cloud-telemetry', language: 'node',    port: 9001, healthPath: '/health' },
+  { name: 'cloud-ais',       language: 'node',    port: 9002, healthPath: '/health' },
+  { name: 'cloud-features',  language: 'node',    port: 9003, healthPath: '/health' },
+  { name: 'cloud-livekit',   language: 'node',    port: 9005, healthPath: '/health' },
+  { name: 'disk',            language: 'generic', port: 9000, healthPath: '/api/health/disk' },
+  { name: 'database',        language: 'generic', port: 9000, healthPath: '/api/health/db' },
+]
+
+async function handleDetect(req, res) {
+  let body = ''
+  for await (const chunk of req) body += chunk
+
+  let host
+  try { host = JSON.parse(body).host?.trim() } catch {}
+  if (!host) {
+    res.writeHead(400, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ error: 'bad request' }))
+    return
+  }
+
+  const results = await Promise.all(
+    DETECT_PROBES.map(async (probe) => {
+      const url = `http://${host}:${probe.port}${probe.healthPath}`
+      try {
+        const response = await fetch(url, { signal: AbortSignal.timeout(3000) })
+        if (!response.ok && response.status !== 429) return null
+        const text = await response.text()
+        let version = null, info = null
+        try {
+          const json = JSON.parse(text)
+          version = extractVersionFromJson(json)
+          if (typeof json.info === 'string') info = json.info
+        } catch {}
+        return { ...probe, version, info }
+      } catch {
+        return null
+      }
+    })
+  )
+
+  res.writeHead(200, { 'Content-Type': 'application/json' })
+  res.end(JSON.stringify(results.filter(Boolean)))
+}
+
 // ── static file server (SPA) ──────────────────────────────────────────────────
 
 function serveStatic(req, res) {
@@ -648,6 +696,7 @@ const server = createServer(async (req, res) => {
   if (req.url === '/api/config' && req.method === 'POST') return handleConfigPost(req, res)
   if (req.url === '/api/check'  && req.method === 'POST') return handleCheck(req, res)
   if (req.url === '/api/ping'   && req.method === 'POST') return handlePing(req, res)
+  if (req.url === '/api/detect' && req.method === 'POST') return handleDetect(req, res)
   serveStatic(req, res)
 })
 
