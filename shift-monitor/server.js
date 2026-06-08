@@ -10,6 +10,7 @@ import nodemailer from 'nodemailer'
 const __dirname = fileURLToPath(new URL('.', import.meta.url))
 const DIST        = join(__dirname, 'dist')
 const CONFIG_FILE = process.env.CONFIG_FILE || join(__dirname, 'config.json')
+const STATE_FILE  = process.env.STATE_FILE  || CONFIG_FILE.replace(/\.json$/, '-state.json')
 const PORT = Number(process.env.PORT) || 4173
 const WARN_LATENCY_MS = 1500
 
@@ -269,6 +270,47 @@ function getDiskState(key) {
   return diskLevelState.get(key)
 }
 
+// ── alert state persistence ───────────────────────────────────────────────────
+// Saves only the alert-sent flags so repeated restarts don't re-fire alerts
+// for conditions that were already reported.
+
+function loadPersistedState() {
+  try {
+    if (!existsSync(STATE_FILE)) return
+    const saved = JSON.parse(readFileSync(STATE_FILE, 'utf8'))
+    if (saved.disk) {
+      for (const [key, val] of Object.entries(saved.disk)) {
+        diskLevelState.set(key, { alertedLevel: val.alertedLevel ?? null, lastInfo: val.lastInfo ?? '' })
+      }
+    }
+    if (saved.services) {
+      for (const [key, val] of Object.entries(saved.services)) {
+        serviceState.set(key, {
+          history:       [],
+          downAlertSent: val.downAlertSent ?? false,
+          warnAlertSent: val.warnAlertSent ?? false,
+          downSince:     null,
+          warnSince:     null,
+        })
+      }
+    }
+  } catch { /* start fresh on any parse error */ }
+}
+
+function saveState() {
+  try {
+    const disk = {}
+    for (const [key, val] of diskLevelState) {
+      disk[key] = { alertedLevel: val.alertedLevel, lastInfo: val.lastInfo }
+    }
+    const services = {}
+    for (const [key, val] of serviceState) {
+      services[key] = { downAlertSent: val.downAlertSent, warnAlertSent: val.warnAlertSent }
+    }
+    writeFileSync(STATE_FILE, JSON.stringify({ disk, services }))
+  } catch { /* non-fatal */ }
+}
+
 // Returns 'escalated', 'recovered', or null
 function recordDiskLevel(key, level, info) {
   const state = getDiskState(key)
@@ -408,9 +450,11 @@ async function runMonitorCycle() {
       }
     }
   }
+  saveState()
 }
 
-// Start monitor after a short warm-up delay so the process settles first.
+// Start monitor — load persisted alert state first so restarts don't re-fire.
+loadPersistedState()
 setTimeout(() => {
   runMonitorCycle()
   setInterval(runMonitorCycle, MONITOR_INTERVAL_MS)
