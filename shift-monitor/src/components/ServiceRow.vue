@@ -18,8 +18,8 @@
     <!-- 4. Latency -->
     <span class="latency" :class="latencyClass">{{ latencyLabel }}</span>
 
-    <!-- 5. Sparkbar — 72 hourly buckets = 3 days -->
-    <span class="sparkbar" aria-label="3-day history">
+    <!-- 5. Sparkbar — 24 hourly buckets = 24h -->
+    <span class="sparkbar" aria-label="24-hour history">
       <span
         v-for="(entry, i) in hourlyHistory"
         :key="i"
@@ -140,8 +140,8 @@ const latencyLabel = computed(() => {
   return `${ms}ms`
 })
 
-const BUCKET_SIZE    = 12
-const DISPLAY_BUCKETS = 72
+const BUCKET_SIZE     = 12  // 12 polls × 5 min = 1h per bucket
+const DISPLAY_BUCKETS = 24  // 24 hours
 
 const hourlyHistory = computed(() => {
   const hist    = props.result?.history ?? []
@@ -268,14 +268,14 @@ const hourlyHistory = computed(() => {
 .sparkbar {
   display: flex;
   align-items: center;
-  gap: 0.5px;
+  gap: 2px;
   overflow: hidden;
 }
 
 .spark-seg {
-  width: 3px;
-  height: 18px;
-  border-radius: 1.5px;
+  width: 8px;
+  height: 20px;
+  border-radius: 3px;
   flex-shrink: 0;
 }
 
