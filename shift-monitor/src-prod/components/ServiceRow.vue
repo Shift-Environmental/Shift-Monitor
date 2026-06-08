@@ -18,7 +18,12 @@
     <!-- 5. Latency -->
     <span class="latency" :class="latencyClass">{{ latencyLabel }}</span>
 
-    <!-- 6. Sparkbar — 24 hourly buckets = 24h -->
+    <!-- 6. Version -->
+    <span class="version-badge" :class="{ 'version-empty': !result?.version }">
+      {{ result?.version ?? '—' }}
+    </span>
+
+    <!-- 7. Sparkbar — 24 hourly buckets = 24h -->
     <span class="sparkbar" aria-label="24-hour history">
       <span
         v-for="(entry, i) in hourlyHistory"
@@ -135,7 +140,7 @@ const hourlyHistory = computed(() => {
 <style scoped>
 .service-row {
   display: grid;
-  grid-template-columns: 190px 84px 100px 64px 88px 1fr 68px;
+  grid-template-columns: 190px 84px 100px 64px 88px 64px 1fr 68px;
   align-items: center;
   padding: 10px 16px;
   border-bottom: 1px solid var(--border);
@@ -307,6 +312,28 @@ const hourlyHistory = computed(() => {
 .spark-down    { background: var(--down); opacity: 0.9; }
 .spark-unknown { background: var(--border2); opacity: 0.5; }
 .spark-empty   { background: var(--border);  opacity: 0.35; }
+
+/* --- 6. Version badge --- */
+.version-badge {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(0, 150, 199, 0.1);
+  color: var(--blue);
+  border: 1px solid rgba(0, 150, 199, 0.25);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: center;
+}
+
+.version-empty {
+  background: transparent;
+  border-color: transparent;
+  color: var(--muted);
+}
 
 /* --- 7. Check button --- */
 .check-btn {

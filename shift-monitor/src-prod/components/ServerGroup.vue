@@ -71,6 +71,7 @@
         <span>Status</span>
         <span>Code</span>
         <span>Latency</span>
+        <span>Version</span>
         <span>24h</span>
         <span></span>
       </div>
@@ -341,7 +342,7 @@ function copySSH() {
 /* ── table ── */
 .table-header {
   display: grid;
-  grid-template-columns: 190px 84px 100px 64px 88px 1fr 68px;
+  grid-template-columns: 190px 84px 100px 64px 88px 64px 1fr 68px;
   padding: 7px 16px;
   font-family: 'Syne', sans-serif;
   font-size: 10px;

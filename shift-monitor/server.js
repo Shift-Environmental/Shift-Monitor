@@ -400,8 +400,14 @@ async function handleCheck(req, res) {
     const status = (code >= 200 && code < 300) || code === 401 || code === 403
       ? (latency > WARN_LATENCY_MS ? 'warn' : 'up')
       : code >= 300 && code < 500 ? 'warn' : 'down'
+    let version = null
+    try {
+      const text = await response.text()
+      const json = JSON.parse(text)
+      if (typeof json.version === 'string') version = json.version
+    } catch { /* non-JSON or no version field — skip */ }
     res.writeHead(200, { 'Content-Type': 'application/json' })
-    res.end(JSON.stringify({ status, code, latency }))
+    res.end(JSON.stringify({ status, code, latency, version }))
   } catch {
     res.writeHead(200, { 'Content-Type': 'application/json' })
     res.end(JSON.stringify({ status: 'down', code: 0, latency: Date.now() - start }))

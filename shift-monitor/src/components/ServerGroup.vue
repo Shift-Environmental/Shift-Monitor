@@ -68,6 +68,7 @@
           <span>Status</span>
           <span>Code</span>
           <span>Latency</span>
+          <span>Version</span>
           <span>24h</span>
           <span></span>
         </div>
@@ -353,7 +354,7 @@ function copySSH() {
 /* ── table header — matches ServiceRow grid ── */
 .table-header {
   display: grid;
-  grid-template-columns: minmax(140px, 2fr) 90px 56px 76px 1fr 38px;
+  grid-template-columns: minmax(140px, 2fr) 90px 56px 76px 64px 1fr 38px;
   gap: 8px;
   padding: 6px 16px;
   font-family: 'Syne', sans-serif;
@@ -364,7 +365,7 @@ function copySSH() {
   color: var(--muted);
   border-bottom: 1px solid var(--border);
   background: rgba(0, 0, 0, 0.06);
-  min-width: 520px;
+  min-width: 580px;
 }
 
 .no-match {
