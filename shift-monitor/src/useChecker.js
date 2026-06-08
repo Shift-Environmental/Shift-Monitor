@@ -143,7 +143,7 @@ async function pingServer(server) {
 // --- core ---
 
 function buildEmptyResult(history = []) {
-  return { status: 'unknown', code: null, latency: null, version: null, history }
+  return { status: 'unknown', code: null, latency: null, version: null, info: null, history }
 }
 
 function initResults() {
@@ -172,7 +172,7 @@ async function checkOne(server, svc) {
 
   results.value = {
     ...results.value,
-    [key]: { status: outcome.status, code: outcome.code, latency: outcome.latency, version: outcome.version ?? prev.version ?? null, history },
+    [key]: { status: outcome.status, code: outcome.code, latency: outcome.latency, version: outcome.version ?? prev.version ?? null, info: outcome.info ?? null, history },
   }
 }
 

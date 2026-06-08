@@ -18,8 +18,9 @@
     <!-- 5. Latency -->
     <span class="latency" :class="latencyClass">{{ latencyLabel }}</span>
 
-    <!-- 6. Version -->
-    <span class="version-badge" :class="{ 'version-empty': !result?.version }">
+    <!-- 6. Version / info -->
+    <span v-if="result?.info" class="info-badge">{{ result.info }}</span>
+    <span v-else class="version-badge" :class="{ 'version-empty': !result?.version }">
       {{ result?.version ?? '—' }}
     </span>
 
@@ -140,7 +141,7 @@ const hourlyHistory = computed(() => {
 <style scoped>
 .service-row {
   display: grid;
-  grid-template-columns: 190px 84px 100px 64px 88px 64px 1fr 68px;
+  grid-template-columns: 190px 84px 100px 64px 88px 120px 1fr 68px;
   align-items: center;
   padding: 10px 16px;
   border-bottom: 1px solid var(--border);
@@ -333,6 +334,16 @@ const hourlyHistory = computed(() => {
   background: transparent;
   border-color: transparent;
   color: var(--muted);
+}
+
+.info-badge {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* --- 7. Check button --- */

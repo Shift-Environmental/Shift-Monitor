@@ -354,7 +354,7 @@ function copySSH() {
 /* ── table header — matches ServiceRow grid ── */
 .table-header {
   display: grid;
-  grid-template-columns: minmax(140px, 2fr) 90px 56px 76px 64px 1fr 38px;
+  grid-template-columns: minmax(140px, 2fr) 90px 56px 76px 120px 1fr 38px;
   gap: 8px;
   padding: 6px 16px;
   font-family: 'Syne', sans-serif;

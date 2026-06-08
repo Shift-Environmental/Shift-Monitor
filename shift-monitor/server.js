@@ -186,48 +186,115 @@ async function sendAlert(subject, text) {
 
 // ── background monitor + flap detection ──────────────────────────────────────
 //
-// serviceState key: `${serverId}/${label}`
-// Flap rule: only alert when FLAP_DOWN_COUNT consecutive checks are all 'down'.
-// This prevents noise when a service bounces (flaps) between up and down.
-// alertSent resets the moment any non-down result is observed (recovery).
+// General services: alert after FLAP_DOWN_COUNT consecutive 'down' checks,
+// and separately after FLAP_DOWN_COUNT consecutive 'warn' checks.
+// Each resets independently; recovery fires one notification when returning to 'up'.
+//
+// Disk services: level-based escalation (ok → warning → critical → full).
+// One alert per upward transition; resets fully when returning to 'ok'.
 
 const serviceState = new Map()
 
 function getState(key) {
-  if (!serviceState.has(key)) serviceState.set(key, { history: [], alertSent: false, downSince: null })
+  if (!serviceState.has(key)) serviceState.set(key, {
+    history: [], downAlertSent: false, warnAlertSent: false,
+    downSince: null, warnSince: null,
+  })
   return serviceState.get(key)
 }
 
+// Returns 'alert-down', 'alert-warn', 'recovered', or null
 function recordStatus(key, status) {
   const state = getState(key)
   state.history.push(status)
   if (state.history.length > 5) state.history.shift()
 
-  if (status !== 'down') {
-    state.alertSent = false
-    state.downSince = null  // service recovered — reset
+  if (status === 'up') {
+    const wasAlerting = state.warnAlertSent || state.downAlertSent
+    state.warnAlertSent = false
+    state.downAlertSent = false
+    state.downSince = null
+    state.warnSince = null
+    return wasAlerting ? 'recovered' : null
+  }
+
+  if (status === 'warn') {
+    if (state.downAlertSent) {
+      state.downAlertSent = false
+      state.downSince = null
+    }
+    if (!state.warnSince) state.warnSince = Date.now()
+    const confirmedWarn = state.history.length >= FLAP_DOWN_COUNT &&
+      state.history.slice(-FLAP_DOWN_COUNT).every(s => s === 'warn' || s === 'down')
+    if (confirmedWarn && !state.warnAlertSent) {
+      state.warnAlertSent = true
+      return 'alert-warn'
+    }
     return null
   }
 
-  if (!state.downSince) state.downSince = Date.now()
-
-  const confirmedDown =
-    state.history.length >= FLAP_DOWN_COUNT &&
-    state.history.slice(-FLAP_DOWN_COUNT).every(s => s === 'down')
-
-  if (confirmedDown && !state.alertSent) {
-    state.alertSent = true
-    return 'alert'
+  // status === 'down'
+  if (state.warnAlertSent) {
+    state.warnAlertSent = false
+    state.warnSince = null
   }
-
+  if (!state.downSince) state.downSince = Date.now()
+  const confirmedDown = state.history.length >= FLAP_DOWN_COUNT &&
+    state.history.slice(-FLAP_DOWN_COUNT).every(s => s === 'down')
+  if (confirmedDown && !state.downAlertSent) {
+    state.downAlertSent = true
+    return 'alert-down'
+  }
   return null
 }
 
 function downDuration(key) {
-  const since = getState(key).downSince
+  const state = getState(key)
+  const since = state.downSince || state.warnSince
   if (!since) return `${FLAP_DOWN_COUNT} min`
   const mins = Math.round((Date.now() - since) / 60_000)
   return mins <= 1 ? '1 min' : `${mins} mins`
+}
+
+// ── disk level-escalation ─────────────────────────────────────────────────────
+// Fires once per upward transition (ok→warning, warning→critical, *→full).
+// When level drops without returning to ok, lowers the alertedLevel so the
+// next upward crossing re-alerts. Fires a recovery notification on return to ok.
+
+const DISK_LEVELS     = { ok: 0, warning: 1, critical: 2, full: 3 }
+const diskLevelState  = new Map()
+
+function getDiskState(key) {
+  if (!diskLevelState.has(key)) diskLevelState.set(key, { alertedLevel: null, lastInfo: '' })
+  return diskLevelState.get(key)
+}
+
+// Returns 'escalated', 'recovered', or null
+function recordDiskLevel(key, level, info) {
+  const state = getDiskState(key)
+  if (info) state.lastInfo = info
+
+  const currentRank = DISK_LEVELS[level] ?? 0
+  const alertedRank = state.alertedLevel !== null ? (DISK_LEVELS[state.alertedLevel] ?? 0) : -1
+
+  if (level === 'ok') {
+    const wasAlerted = state.alertedLevel !== null
+    state.alertedLevel = null
+    return wasAlerted ? 'recovered' : null
+  }
+
+  if (currentRank > alertedRank) {
+    state.alertedLevel = level
+    return 'escalated'
+  }
+
+  // Improved but not to ok (e.g. critical→warning): lower the tracked level
+  // so the next escalation to critical will re-alert.
+  if (currentRank < alertedRank && currentRank > 0) {
+    state.alertedLevel = level
+  }
+
+  return null
 }
 
 async function monitorCheckHttp(url) {
@@ -267,26 +334,77 @@ async function runMonitorCycle() {
     // TCP reachability (SSH port 22)
     const pingKey    = `${server.id}/ping`
     const pingStatus = await monitorCheckTcp(host, 22)
-    if (recordStatus(pingKey, pingStatus) === 'alert') {
+    const pingResult = recordStatus(pingKey, pingStatus)
+    if (pingResult === 'alert-down') {
       const dur = downDuration(pingKey)
       await sendAlert(
         `${server.name} — server unreachable for ${dur}`,
         `Host "${server.name}" (${host}) has failed ${FLAP_DOWN_COUNT} consecutive TCP reachability checks.\n\nDown for: ${dur}\nTime: ${new Date().toISOString()}`,
       )
+    } else if (pingResult === 'recovered') {
+      await sendAlert(
+        `${server.name} — server recovered`,
+        `Host "${server.name}" (${host}) is reachable again.\nTime: ${new Date().toISOString()}`,
+      )
     }
 
-    // HTTP health checks per service
     if (!Array.isArray(server.services)) continue
     for (const svc of server.services) {
       const svcKey = `${server.id}/${svc.name}`
       const url    = svc.checkUrl || `http://${host}:${svc.port}${svc.healthPath || '/'}`
-      const status = await monitorCheckHttp(url)
-      if (recordStatus(svcKey, status) === 'alert') {
-        const dur = downDuration(svcKey)
-        await sendAlert(
-          `${server.name} / ${svc.name} — down for ${dur}`,
-          `Service "${svc.name}" on "${server.name}" has been unresponsive for ${dur}.\n\nURL: ${url}\nTime: ${new Date().toISOString()}`,
-        )
+
+      if (svc.name === 'disk') {
+        // Level-based disk alerting — parse JSON to get actual threshold level
+        try {
+          const res  = await fetch(url, { signal: AbortSignal.timeout(7000) })
+          const json = await res.json().catch(() => ({}))
+          const level  = (json.status === 'error' ? 'critical' : json.status) || 'ok'
+          const info   = json.info || ''
+          const result = recordDiskLevel(svcKey, level, info)
+          if (result === 'escalated') {
+            const alertedLevel = getDiskState(svcKey).alertedLevel
+            await sendAlert(
+              `${server.name} / disk — ${alertedLevel.toUpperCase()}`,
+              `Disk on "${server.name}" has reached the ${alertedLevel} threshold.\n\nUsage: ${info || 'unknown'}\nTime: ${new Date().toISOString()}`,
+            )
+          } else if (result === 'recovered') {
+            const lastInfo = getDiskState(svcKey).lastInfo
+            await sendAlert(
+              `${server.name} / disk — back to normal`,
+              `Disk on "${server.name}" has returned to normal.\n\nUsage: ${lastInfo || 'unknown'}\nTime: ${new Date().toISOString()}`,
+            )
+          }
+        } catch {
+          const result = recordStatus(svcKey, 'down')
+          if (result === 'alert-down') {
+            await sendAlert(
+              `${server.name} / disk — unreachable`,
+              `Disk health endpoint on "${server.name}" is unreachable.\nURL: ${url}\nTime: ${new Date().toISOString()}`,
+            )
+          }
+        }
+      } else {
+        // Standard flap-detected alerting for all other services
+        const status = await monitorCheckHttp(url)
+        const result = recordStatus(svcKey, status)
+        if (result === 'alert-down') {
+          const dur = downDuration(svcKey)
+          await sendAlert(
+            `${server.name} / ${svc.name} — down for ${dur}`,
+            `Service "${svc.name}" on "${server.name}" has been unresponsive for ${dur}.\n\nURL: ${url}\nTime: ${new Date().toISOString()}`,
+          )
+        } else if (result === 'alert-warn') {
+          const dur = downDuration(svcKey)
+          await sendAlert(
+            `${server.name} / ${svc.name} — degraded for ${dur}`,
+            `Service "${svc.name}" on "${server.name}" has been returning errors or high latency for ${dur}.\n\nURL: ${url}\nTime: ${new Date().toISOString()}`,
+          )
+        } else if (result === 'recovered') {
+          await sendAlert(
+            `${server.name} / ${svc.name} — recovered`,
+            `Service "${svc.name}" on "${server.name}" has recovered.\nTime: ${new Date().toISOString()}`,
+          )
+        }
       }
     }
   }
@@ -381,6 +499,41 @@ async function handleConfigPost(req, res) {
 
 // ── /api/check — HTTP health check ───────────────────────────────────────────
 
+function extractVersionFromJson(json) {
+  if (!json || typeof json !== 'object') return null
+  const candidates = [
+    json.version,
+    json.build?.version,
+    json.info?.build?.version,
+    json.status?.version,
+    json.data?.version,
+    json.metadata?.version,
+    json.app?.version,
+    json.release?.version,
+  ]
+  for (const candidate of candidates) {
+    if (typeof candidate === 'string' && candidate.trim()) return candidate.trim()
+  }
+  return null
+}
+
+function extractVersionFromHeaders(headers) {
+  const keys = ['x-service-version', 'x-version', 'x-app-version', 'server-version']
+  for (const key of keys) {
+    const value = headers.get(key)
+    if (value) return value.trim()
+  }
+  return null
+}
+
+function parseVersionFromText(text) {
+  const normalized = text.replace(/\r?\n/g, ' ')
+  const match = normalized.match(/(?:version|app_version|build_version)\s*[:=]\s*['"]?([\w.-]+)['"]?/i)
+  if (match?.[1]) return match[1].trim()
+  const semverMatch = normalized.match(/\bv?(\d+\.\d+\.\d+(?:[-+][\w.]+)?)\b/)
+  return semverMatch?.[1] ?? null
+}
+
 async function handleCheck(req, res) {
   let body = ''
   for await (const chunk of req) body += chunk
@@ -400,14 +553,24 @@ async function handleCheck(req, res) {
     const status = (code >= 200 && code < 300) || code === 401 || code === 403
       ? (latency > WARN_LATENCY_MS ? 'warn' : 'up')
       : code >= 300 && code < 500 ? 'warn' : 'down'
+
+    const text = await response.text()
     let version = null
+    let info = null
     try {
-      const text = await response.text()
       const json = JSON.parse(text)
-      if (typeof json.version === 'string') version = json.version
-    } catch { /* non-JSON or no version field — skip */ }
+      version = extractVersionFromJson(json)
+      if (typeof json.info === 'string') info = json.info
+    } catch {
+      // Non-JSON response; fall through to text/header parsing.
+    }
+
+    version = version
+      || extractVersionFromHeaders(response.headers)
+      || parseVersionFromText(text)
+
     res.writeHead(200, { 'Content-Type': 'application/json' })
-    res.end(JSON.stringify({ status, code, latency, version }))
+    res.end(JSON.stringify({ status, code, latency, version, info }))
   } catch {
     res.writeHead(200, { 'Content-Type': 'application/json' })
     res.end(JSON.stringify({ status: 'down', code: 0, latency: Date.now() - start }))
